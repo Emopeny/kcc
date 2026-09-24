@@ -1,0 +1,214 @@
+name: KCC 云端转换
+
+# 在 GitHub 云端把漫画包转成电子书，全程不占本机硬盘空间。
+# 用法：Actions → KCC 云端转换 → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "漫画包直链(CBZ/CBR/ZIP/RAR/PDF)，多个用空格或换行分隔；留空=跑自检样例"
+        required: false
+        default: ""
+      format:
+        description: "输出格式"
+        required: true
+        type: choice
+        default: EPUB
+        options:
+          - EPUB
+          - AZW3
+          - MOBI
+          - CBZ
+          - PDF
+          - KFX
+      profile:
+        description: "目标设备 profile"
+        required: true
+        type: choice
+        default: KV
+        options:
+          - KV
+          - KPW5
+          - KPW6
+          - K11
+          - KO
+          - KS
+          - KCS
+          - KoC
+          - KoL
+          - KoS
+          - RmkPP
+          - OTHER
+      manga_style:
+        description: "日漫右翻页模式"
+        required: true
+        type: boolean
+        default: true
+      hq:
+        description: "高质量(尽量不压缩图片)"
+        required: true
+        type: boolean
+        default: false
+      title:
+        description: "书名(留空=defaulttitle)"
+        required: false
+        default: ""
+      author:
+        description: "作者"
+        required: false
+        default: ""
+      extra_args:
+        description: "额外 kcc-c2e 参数(高级，留空即可)"
+        required: false
+        default: ""
+      release_tag:
+        description: "填了就建 Release 并把成品挂上去(例如 v1)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout (fork: Emopeny/kcc)
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CLI deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full curl
+          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir \
+            "Pillow>=11.3.0" \
+            "psutil>=7.2.2" \
+            "requests>=2.34.2" \
+            "python-slugify>=8.0.4,<9.0.0" \
+            "packaging>=26.2" \
+            "mozjpeg-lossless-optimization>=1.2.0" \
+            "natsort>=8.4.0" \
+            "numpy>=1.22.4" \
+            "PyMuPDF>=1.18.0"
+
+      - name: Install calibre (AZW3/MOBI 走 EPUB 二次转换)
+        if: inputs.format == 'AZW3' || inputs.format == 'MOBI'
+        run: |
+          sudo apt-get install -y -qq calibre
+          ebook-convert --version
+
+      - name: Prepare input
+        id: prep
+        run: |
+          mkdir -p in out
+          SRC="$(printf '%s' "${{ inputs.source }}" | tr '\n' ' ')"
+          if [ -z "$(echo "$SRC" | tr -d '[:space:]')" ]; then
+            echo "::notice::未提供 source，运行自检样例"
+            python3 .github/scripts/make_test_comic.py
+            echo "mode=selftest" >> "$GITHUB_OUTPUT"
+          else
+            n=0
+            for url in $SRC; do
+              n=$((n+1))
+              echo "下载 [$n] $url"
+              curl -fL --retry 3 --retry-delay 5 -A "Mozilla/5.0" -o "in/src_${n}" "$url"
+            done
+            echo "mode=url" >> "$GITHUB_OUTPUT"
+          fi
+          echo "--- 输入 ---"
+          ls -lh in
+
+      - name: Convert with kcc-c2e
+        id: conv
+        run: |
+          set -euo pipefail
+          FORMAT="${{ inputs.format }}"
+          KCC_FORMAT="$FORMAT"
+          POST_TO=""
+          if [ "$FORMAT" = "AZW3" ] || [ "$FORMAT" = "MOBI" ]; then
+            KCC_FORMAT="EPUB"
+            POST_TO="$FORMAT"
+          fi
+
+          ARGS=(-p "${{ inputs.profile }}" -f "$KCC_FORMAT" -o out)
+          if [ "${{ inputs.manga_style }}" = "true" ]; then ARGS+=(-m); fi
+          if [ "${{ inputs.hq }}" = "true" ]; then ARGS+=(-q); fi
+          if [ -n "${{ inputs.title }}" ]; then ARGS+=(-t "${{ inputs.title }}"); fi
+          if [ -n "${{ inputs.author }}" ]; then ARGS+=(-a "${{ inputs.author }}"); fi
+          EXTRA="${{ inputs.extra_args }}"
+          if [ -n "$(echo "$EXTRA" | tr -d '[:space:]')" ]; then
+            read -r -a EXTRA_ARR <<< "$EXTRA"
+            ARGS+=("${EXTRA_ARR[@]}")
+          fi
+
+          echo "kcc-c2e ${ARGS[*]} in/*"
+          python3 kcc-c2e.py "${ARGS[@]}" in/*
+          echo "POST_TO=$POST_TO" >> "$GITHUB_OUTPUT"
+
+      - name: Post-convert (EPUB -> AZW3/MOBI)
+        if: inputs.format == 'AZW3' || inputs.format == 'MOBI'
+        run: |
+          set -euo pipefail
+          target="${{ inputs.format }}"
+          ext="$(echo "$target" | tr '[:upper:]' '[:lower:]')"
+          shopt -s nullglob
+          found=0
+          for f in out/*.epub; do
+            found=1
+            echo "ebook-convert $f -> ${f%.epub}.$ext"
+            ebook-convert "$f" "${f%.epub}.$ext" \
+              --output-profile kindle_pw3 --no-inline-toc --disable-font-rescaling
+          done
+          if [ "$found" = "0" ]; then
+            echo "::error::KCC 没有产出 EPUB，无法转为 $target"
+            exit 1
+          fi
+          rm -f out/*.epub
+
+      - name: Report outputs
+        run: |
+          {
+            echo "## KCC 云端转换完成"
+            echo
+            echo "| 参数 | 值 |"
+            echo "|---|---|"
+            echo "| 来源 | ${{ steps.prep.outputs.mode }} |"
+            echo "| 格式 | ${{ inputs.format }} |"
+            echo "| 设备 | ${{ inputs.profile }} |"
+            echo "| 右翻页 | ${{ inputs.manga_style }} |"
+            echo "| HQ | ${{ inputs.hq }} |"
+            echo
+            echo "### 产物"
+            echo '```'
+            ls -lh out || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kcc-output-${{ inputs.format }}-${{ github.run_number }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to Release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TAG" --notes "KCC 云端转换产物 (run #${{ github.run_number }})"
+          gh release upload "$TAG" out/* --clobber
+          echo "已上传到 Release: $TAG" >> "$GITHUB_STEP_SUMMARY"
