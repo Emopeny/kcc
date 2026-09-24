@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 """验证 KCC 中文化是否真正生效。
 
-四层检查，任一条不成立即退出码非 0：
+检查项：
+  0. （加 --require-resource 时）翻译文件必须已进入 Qt 资源系统 —— 即打包后的形态
   1. .qm 翻译文件能否装载
   2. 控件层：Qt translate() 是否返回中文
   3. 运行时层：查表与片段替换是否正确（含控制指令必须原样透传）
   4. 真实界面：用生成的 Ui_mainWindow 构建窗口，断言控件文字
+
+任一条不成立即退出码非 0。
 """
 import os
 import sys
@@ -15,8 +18,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, ROOT)
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication              # noqa: E402
-from PySide6.QtWidgets import QApplication, QMainWindow  # noqa: E402
+require_resource = "--require-resource" in sys.argv
+
+from PySide6.QtCore import QCoreApplication, QFile        # noqa: E402
+from PySide6.QtWidgets import QApplication, QMainWindow   # noqa: E402
 
 from kindlecomicconverter.i18n import install_translator, tr_runtime  # noqa: E402
 
@@ -30,7 +35,22 @@ def check(label, got, want):
         fails.append(f"{label}: 期望 {want!r}, 实际 {got!r}")
 
 
-app = QApplication(sys.argv)
+# 只把脚本名交给 Qt，避免它去解析我们自己的参数
+app = QApplication([sys.argv[0]])
+
+# --- 0) 打包形态检查：资源系统里必须真的有这个文件 ---
+if require_resource:
+    from kindlecomicconverter import KCC_rc  # noqa: F401  导入即注册资源
+    res = ":/i18n/kcc_zh_CN.qm"
+    exists = QFile(res).exists()
+    print(f"{'OK  ' if exists else 'FAIL'} 资源 {res} 存在\n      实际: {exists}")
+    if not exists:
+        p = os.path.join(ROOT, "kindlecomicconverter", "KCC_rc.py")
+        src = open(p, encoding="utf-8", errors="ignore").read()
+        print(f"       KCC_rc.py: {len(src)} 字节, "
+              f"含 'kcc_zh_CN' = {'kcc_zh_CN' in src}, "
+              f"含 'i18n' = {'i18n' in src}")
+        fails.append("翻译文件未进入 Qt 资源系统")
 
 # --- 1) 翻译文件装载 ---
 check("install_translator()", install_translator(app), True)
