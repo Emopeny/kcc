@@ -62,6 +62,13 @@ jobs:
           pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
           ls -l i18n/
 
+      - name: 准备 Qt 自带翻译（qtbase 中文目录）
+        run: |
+          QT_TR=$(python -c "import PySide6,os;print(os.path.join(os.path.dirname(PySide6.__file__),'translations'))")
+          echo "PySide6 translations: $QT_TR"
+          cp "$QT_TR/qtbase_zh_CN.qm" i18n/qtbase_zh_CN.qm
+          ls -l i18n/
+
       - name: 自检 A —— 文件系统回退路径
         run: python .github/scripts/verify_zh.py
 
@@ -109,6 +116,9 @@ jobs:
         shell: pwsh
         run: |
           pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          $qtTr = python -c "import PySide6,os;print(os.path.join(os.path.dirname(PySide6.__file__),'translations'))"
+          Copy-Item "$qtTr/qtbase_zh_CN.qm" i18n/qtbase_zh_CN.qm
+          Get-ChildItem i18n | Format-Table Name, Length
           pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
 
       - name: 打包 exe
@@ -155,6 +165,9 @@ jobs:
       - name: 编译翻译文件并重建资源
         run: |
           pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          QT_TR=$(python -c "import PySide6,os;print(os.path.join(os.path.dirname(PySide6.__file__),'translations'))")
+          cp "$QT_TR/qtbase_zh_CN.qm" i18n/qtbase_zh_CN.qm
+          ls -l i18n/
           pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
 
       - name: 打包可执行程序

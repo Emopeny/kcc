@@ -626,7 +626,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
 class KCCGUI(KCC_ui.Ui_mainWindow):
     def selectDefaultOutputFolder(self):
-        dname = QFileDialog.getExistingDirectory(MW, 'Select default output folder', self.defaultOutputFolder)
+        dname = QFileDialog.getExistingDirectory(MW, tr_runtime('Select default output folder'), self.defaultOutputFolder)
         if self.is_directory_on_kindle(dname):
             return
         if dname != '':
@@ -642,7 +642,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
                 return True
 
     def selectOutputFolder(self):
-        dname = QFileDialog.getExistingDirectory(MW, 'Select output directory', self.lastPath)
+        dname = QFileDialog.getExistingDirectory(MW, tr_runtime('Select output directory'), self.lastPath)
         if self.is_directory_on_kindle(dname):
             return
         if dname != '':
@@ -658,11 +658,11 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
             self.needClean = False
             GUI.jobList.clear()
         if self.tar or self.sevenzip:
-            fnames = QFileDialog.getOpenFileNames(MW, 'Select file', self.lastPath,
-                                                            'Comic (*.cbz *.cbr *.cb7 *.zip *.rar *.7z *.epub *.pdf);;All (*.*)')
+            fnames = QFileDialog.getOpenFileNames(MW, tr_runtime('Select file'), self.lastPath,
+                                                            tr_runtime('Comic (*.cbz *.cbr *.cb7 *.zip *.rar *.7z *.epub *.pdf);;All (*.*)'))
         else:
-            fnames = QFileDialog.getOpenFileNames(MW, 'Select file', self.lastPath,
-                                                            'Comic (*.pdf);;All (*.*)')
+            fnames = QFileDialog.getOpenFileNames(MW, tr_runtime('Select file'), self.lastPath,
+                                                            tr_runtime('Comic (*.pdf);;All (*.*)'))
         for fname in fnames[0]:
             if fname != '':
                 self.lastPath = os.path.abspath(os.path.join(fname, os.pardir))
@@ -674,7 +674,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
             self.needClean = False
             GUI.jobList.clear()
  
-        dialog = QFileDialog(MW, 'Select input folder(s)', self.lastPath)
+        dialog = QFileDialog(MW, tr_runtime('Select input folder(s)'), self.lastPath)
         dialog.setFileMode(QFileDialog.FileMode.Directory)
         dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
@@ -775,7 +775,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
         if not sname:
             if QApplication.keyboardModifiers() == Qt.ShiftModifier:
                 # Multi-directory selection for bulk editing ComicInfo.xml
-                dialog = QFileDialog(MW, 'Select volume directories', self.lastPath)
+                dialog = QFileDialog(MW, tr_runtime('Select volume directories'), self.lastPath)
                 dialog.setFileMode(QFileDialog.FileMode.Directory)
                 dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
                 dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
@@ -795,8 +795,8 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
                         self.lastPath = os.path.dirname(selected_dirs[0])
             else:
                 if self.sevenzip:
-                    fnames = QFileDialog.getOpenFileNames(MW, 'Select file(s)', self.lastPath,
-                                                          'Comic (*.cbz *.cbr *.cb7)')
+                    fnames = QFileDialog.getOpenFileNames(MW, tr_runtime('Select file(s)'), self.lastPath,
+                                                          tr_runtime('Comic (*.cbz *.cbr *.cb7)'))
                     files = fnames[0]
                     if files:
                         self.lastPath = os.path.abspath(os.path.join(files[0], os.pardir))
@@ -1207,9 +1207,9 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
     def showDialog(self, message, kind):
         message = tr_runtime(message)
         if kind == 'error':
-            QMessageBox.critical(MW, 'KCC - Error', message, QMessageBox.StandardButton.Ok)
+            QMessageBox.critical(MW, tr_runtime('KCC - Error'), message, QMessageBox.StandardButton.Ok)
         elif kind == 'question':
-            GUI.versionCheck.setAnswer(QMessageBox.question(MW, 'KCC - Question', message,
+            GUI.versionCheck.setAnswer(QMessageBox.question(MW, tr_runtime('KCC - Question'), message,
                                                                       QMessageBox.Yes,
                                                                       QMessageBox.No))
 
@@ -1930,7 +1930,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
                 volumeText = self.volumeLine.text()
                 volumes, error = self.parseVolumeInput(volumeText, len(self.files))
                 if error:
-                    self.statusLabel.setText(error)
+                    self.statusLabel.setText(tr_runtime(error))
                     return
 
             if not bulkData and volumes is None:

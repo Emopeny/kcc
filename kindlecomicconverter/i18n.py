@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 """KCC 中文化运行时支持。
 
-KCC 的界面文字分两层：
-  * 控件层（按钮/标签/菜单/提示）由 Qt 的 .ts/.qm 机制处理 —— 见 i18n/kcc_zh_CN.ts
-  * 运行时消息（任务列表、对话框、托盘通知、进度条）硬编码在源码里，
-    统一在消息 funnel 处查本模块的表替换
+KCC 的界面文字分两层，本模块负责其中一层：
+  * 控件层（按钮/标签/菜单/提示）走 Qt 的 .ts/.qm 机制 —— 见 i18n/kcc_zh_CN.ts
+  * 运行时消息（任务列表、对话框、托盘通知、进度条、文件对话框标题等）
+    硬编码在源码里，统一在消息 funnel 处查本模块的表替换
 
-本文件由工具生成，请勿手改；改翻译请改 i18n/kcc_zh_CN.ts 或重新生成。
+另外还会装载 Qt 自带的 qtbase 中文目录，让 QMessageBox 的 OK/Yes/No 等
+标准按钮也显示中文（这些文字来自 Qt 自己，不在 KCC 源码里）。
+
+本文件由工具生成，请勿手改。
 """
 
 import os
 import sys
 
-from PySide6.QtCore import QCoreApplication, QTranslator
+from PySide6.QtCore import QCoreApplication, QLibraryInfo, QTranslator
 
-# 运行时消息表：原文 -> 中文。整句与拼接片段混排，替换时长串优先。
+# 运行时消息表：原文/片段 -> 中文。整句与拼接片段混排，替换时长串优先。
 RUNTIME_ZH = {
     'Kindle Comic Converter': 'Kindle 漫画转换器',
     'Kindle Comic Converter ': 'Kindle 漫画转换器 ',
@@ -76,39 +79,260 @@ RUNTIME_ZH = {
     '(multiple values)': '（多个值）',
     '(multiple files)': '（多个文件）',
     'e.g., 5 or 1-10 or 1,3,5': '例如 5 或 1-10 或 1,3,5',
+    'Select default output folder': '选择默认输出文件夹',
+    'Select output directory': '选择输出目录',
+    'Select file': '选择文件',
+    'Select file(s)': '选择文件',
+    'Select input folder(s)': '选择输入文件夹',
+    'Select volume directories': '选择卷目录',
+    'Comic (*.cbz *.cbr *.cb7 *.zip *.rar *.7z *.epub *.pdf);;All (*.*)': '漫画文件 (*.cbz *.cbr *.cb7 *.zip *.rar *.7z *.epub *.pdf);;全部文件 (*.*)',
+    'Comic (*.pdf);;All (*.*)': '漫画文件 (*.pdf);;全部文件 (*.*)',
+    'Comic (*.cbz *.cbr *.cb7)': '漫画文件 (*.cbz *.cbr *.cb7)',
+    'KCC - Error': 'KCC - 错误',
+    'KCC - Question': 'KCC - 询问',
+    'No valid volume numbers parsed': '没有解析出有效的卷号',
+    'Volume numbers must be positive': '卷号必须是正数',
+    'Invalid number': '无效的数字',
+    'Invalid range format (use start-end)': '区间格式无效（应写成 起始-结束）',
+    'Invalid range format': '区间格式无效',
+    'Invalid range: start > end': '区间无效：起始值大于结束值',
+    'Volume count (': '卷号数量（',
+    ') != file count (': '）与文件数量不匹配（',
+    ' day(s) left': ' 天剩余',
+    ': CBR is read-only': '：CBR 文件为只读',
+    "Process Failed. Custom title can't be set when processing more than 1 source.\nDid you forget to check fusion?": '处理失败。处理多个源文件时无法设置自定义书名。\n是不是忘了勾选「文件合并」？',
+    'Some files failed to save:\n\n': '以下文件保存失败：\n\n',
+    '<html><head/><body><p>After calculating the cropping boundaries, &quot;back up&quot; a specified percentage amount.</p></body></html>': '<html><head/><body><p>计算出裁剪边界后，按指定百分比向外&quot;回退&quot;多保留一部分。</p></body></html>',
+    'Preserve Margin %': '保留边距 %',
+    'Cropping power:': '裁剪力度：',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Don\'t use metadata Title<br/></span>Write default title.</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Add metadata Title to the default schema<br/></span>Write default title with Title from ComicInfo.xml or other embedded metadata.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Use metadata Title only<br/></span>Write Title from ComicInfo.xml or other embedded metadata.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 不使用元数据标题<br/></span>写入默认标题。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 将元数据标题附加到默认方案<br/></span>写入默认标题，并附加来自 ComicInfo.xml 或其他内嵌元数据的标题。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 仅使用元数据标题<br/></span>写入来自 ComicInfo.xml 或其他内嵌元数据的标题。</p></body></html>',
+    'Metadata Title': '元数据标题',
+    '<html><head/><body><p>In virtual panel mode:</p><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Horizontal<br/></span>First two panels are the top panels.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Vertical<br/></span>First two panels are the side panels.</p></body></html>': '<html><head/><body><p>虚拟面板模式下：</p><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 横向<br/></span>前两个面板是顶部面板。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 纵向<br/></span>前两个面板是两侧面板。</p></body></html>',
+    'Vertical 4 Panel': '纵向 4 面板',
+    "<html><head/><body><p style='white-space:pre'>Enable special parsing mode for Korean Webtoons.</p></body></html>": "<html><head/><body><p style='white-space:pre'>启用针对韩国条漫（Webtoon）的特殊解析模式。</p></body></html>",
+    'Webtoon mode': '条漫模式',
+    'WebP (experimental)': 'WebP（实验性）',
+    '<html><head/><body><p>Attempt to crop main cover from wide image.</p></body></html>': '<html><head/><body><p>尝试从宽幅图片中裁剪出主封面。</p></body></html>',
+    'Smart Cover Crop': '智能封面裁剪',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Disabled</span></p><p>Disabled</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Margins<br/></span>Margins</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Margins + page numbers<br/></span>Margins +page numbers</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 禁用</span></p><p>禁用裁剪</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 边距<br/></span>裁剪边距</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 边距 + 页码<br/></span>裁剪边距和页码</p></body></html>',
+    'Cropping mode': '裁剪模式',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - BW only<br/></span>Only autocontrast bw pages. Ignored for pages where near blacks or whites don\'t exist.</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Disabled<br/></span>Disable autocontrast</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - BW and Color<br/></span>BW and color images will be autocontrasted. Ignored for pages where near blacks or whites don\'t exist.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 仅黑白<br/></span>只对黑白页面做自动对比度。没有接近纯黑或纯白像素的页面会被忽略。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 禁用<br/></span>禁用自动对比度。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 黑白和彩色<br/></span>黑白和彩色图片都会做自动对比度。没有接近纯黑或纯白像素的页面会被忽略。</p></body></html>',
+    'Custom Autocontrast': '自定义自动对比度',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - JPEG<br/></span>Use JPEG files</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - force PNG<br/></span>Create PNG files instead JPEG for black and white images</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - mozJpeg<br/></span>10-20% smaller JPEG file, with the same image quality, but processing time multiplied by 2</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - JPEG<br/></span>使用 JPEG 文件。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 强制 PNG<br/></span>黑白图片生成 PNG 而非 JPEG。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - mozJpeg<br/></span>同等画质下 JPEG 文件缩小 10-20%，但处理时间翻倍。</p></body></html>',
+    'Cover Fill': '封面填充',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Disabled<br/></span>Disabled</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Horizontal<br/></span>Crop empty horizontal lines.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Both<br/></span>Crop empty horizontal and vertical lines.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 禁用<br/></span>禁用</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 横向<br/></span>裁剪空白横行。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 双向<br/></span>裁剪空白横行和竖列。</p></body></html>',
+    'Inter-panel crop': '面板间裁剪',
+    '<html><head/><body><p><span style=" font-weight:700; text-decoration: underline;">Unchecked<br/></span>Maximal output file size is 100 MB for Webtoon, 400 MB for others before split occurs.</p><p><span style=" font-weight:700; text-decoration: underline;">Checked</span><br/>Output file size specified in &quot;Chunk size MB&quot; before split occurs.</p></body></html>': '<html><head/><body><p><span style=" font-weight:700; text-decoration: underline;">不勾选<br/></span>拆分前输出文件最大为：条漫 100 MB，其他 400 MB。</p><p><span style=" font-weight:700; text-decoration: underline;">勾选</span><br/>按&quot;分卷大小 MB&quot;中指定的大小进行拆分。</p></body></html>',
+    'Chunk size': '分卷大小',
+    "<html><head/><body><p style='white-space:pre'>Do not process any image, ignore profile and processing options.</p></body></html>": "<html><head/><body><p style='white-space:pre'>不处理任何图片，忽略设备配置和处理选项。</p></body></html>",
+    'Disable processing': '禁用处理',
+    'Shift first page to opposite side in landscape for two page spread alignment': '横屏时将第一页移到对侧，用于对齐双页跨页。',
+    'Spread shift': '跨页偏移',
+    'Force full color images to be saved in lossless PNG format, dramatically increases the filesize.': '强制全彩图片以无损 PNG 格式保存，会显著增加文件体积。',
+    'Force PNG RGB': '强制 PNG RGB',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Split<br/></span>Double page spreads will be cut into two separate pages.</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Split and rotate<br/></span>Double page spreads will be displayed twice. First split and then rotated. </p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Rotate<br/></span>Double page spreads will be rotated.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 切割<br/></span>双页跨页会被切成两个独立页面。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 切割并旋转<br/></span>双页跨页会显示两次：先切割，再旋转。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 旋转<br/></span>旋转双页跨页。</p></body></html>',
+    'Spread splitter': '跨页拆分',
+    '<html><head/><body><p>Set a custom gamma correction.</p><p>1.0 is default (disabled).<br/>&lt; 1.0 makes the image brighter.<br/>&gt; 1.0 makes the image darker. </p><p>1.8 was the default in KCC 9.1.0 and earlier.</p><p>Use if you want to make midtones darker.</p></body></html>': '<html><head/><body><p>设置自定义伽马校正。</p><p>1.0 为默认值（禁用）。<br/>&lt; 1.0 使画面变亮。<br/>&gt; 1.0 使画面变暗。</p><p>1.8 是 KCC 9.1.0 及更早版本的默认值。</p><p>想让中间调更暗时使用。</p></body></html>',
+    'Custom gamma': '自定义伽马',
+    '<html><head/><body><p>Default EPUB language is en-US.</p><p>Only use if your EPUB reader has problems with English fonts.</p></body></html>': '<html><head/><body><p>默认 EPUB 语言为 en-US。</p><p>仅当你的 EPUB 阅读器对英文字体有显示问题时才使用。</p></body></html>',
+    'EPUB language': 'EPUB 语言',
+    'Rotate 2 page spreads in opposite direction than normal.': '将双页跨页按与正常相反的方向旋转。',
+    'Rotate Right': '向右旋转',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Main Drive<br/></span>Use dedicated temporary directory on main OS drive.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Source File Drive<br/></span>Create temporary file directory on source file drive.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 系统盘<br/></span>使用系统主盘上的专用临时目录。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 源文件所在盘<br/></span>在源文件所在盘上创建临时目录。</p></body></html>',
+    'Temp Directory': '临时目录',
+    "Delete input file(s) or directory. It's not recoverable!": '删除输入文件或目录。此操作不可恢复！',
+    'Delete input': '删除输入',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - 1x4<br/></span>Keep format 1x4 panels strips.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - 2x2<br/></span>Turn 1x4 strips to 2x2 to maximize screen usage.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 1x4<br/></span>保持 1x4 面板条带格式。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 2x2<br/></span>将 1x4 条带转为 2x2，以最大化利用屏幕。</p></body></html>',
+    '1x4 to 2x2 strips': '1x4 转 2x2 条带',
+    'Custom JPEG Quality': '自定义 JPEG 质量',
+    '<html><head/><body><p>When the spread splitter option is partially checked,</p><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Rotate Last<br/></span>Put the rotated 2 page spread after the split spreads.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Rotate First<br/></span>Put the rotated 2 page spread before the split spreads.</p></body></html>': '<html><head/><body><p>当跨页拆分选项为半勾选状态时：</p><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 最后旋转<br/></span>旋转后的双页跨页放在拆分页面之后。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 首先旋转<br/></span>旋转后的双页跨页放在拆分页面之前。</p></body></html>',
+    'Rotate First': '首先旋转',
+    '<html><head/><body><p>Default Title</p></body></html>': '<html><head/><body><p>默认标题</p></body></html>',
+    'Default Title': '默认标题',
+    'PDF Width Render': 'PDF 宽度渲染',
+    'Erase rainbow effect on color eink screen by attenuating interfering frequencies': '通过衰减干扰频率，消除彩色墨水屏上的彩虹纹。',
+    'Rainbow eraser': '彩虹纹消除',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - 2 page landscape<br/></span>2 viewports for left and right pages</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - 1 page landscape<br/></span>A single centered viewport for 1 page</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 双页横屏<br/></span>左右两页各一个视口。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 单页横屏<br/></span>单页使用单个居中视口。</p></body></html>',
+    '1 Page Landscape': '单页横屏',
+    'Default Author is KCC': '默认作者为 KCC',
+    'Default Author': '默认作者',
+    '<html><head/><body><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">Unchecked - Automatic mode<br/></span>The output will be split automatically.</p><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">Checked - Volume mode<br/></span>Every subdirectory will be considered as a separate volume.</p></body></html>': '<html><head/><body><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">不勾选 - 自动模式<br/></span>输出会自动拆分。</p><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">勾选 - 分卷模式<br/></span>每个子目录视为单独的一卷。</p></body></html>',
+    'Output split': '输出拆分',
+    '<html><head/><body><p>Combines all selected files into a single file. (Helpful for combining chapters into volumes.)</p></body></html>': '<html><head/><body><p>将所有选中的文件合并为一个文件（便于把章节合并为卷）。</p></body></html>',
+    'File Fusion': '文件合并',
+    "<html><head/><body><p style='white-space:pre'>Disable conversion to grayscale.</p></body></html>": "<html><head/><body><p style='white-space:pre'>禁用灰度转换。</p></body></html>",
+    'Color mode': '彩色模式',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Nothing<br/></span>Images smaller than device resolution will not be resized.</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - Stretching<br/></span>Images smaller than device resolution will be resized. Aspect ratio will be not preserved.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Upscaling<br/></span>Images smaller than device resolution will be resized. Aspect ratio will be preserved.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 不处理<br/></span>小于设备分辨率的图片不会被缩放。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 拉伸<br/></span>小于设备分辨率的图片会被放大，但不保持宽高比。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 放大<br/></span>小于设备分辨率的图片会被放大，并保持宽高比。</p></body></html>',
+    'Stretch/Upscale': '拉伸/放大',
+    'Use the PDF/EPUB image extraction method from older KCC versions. \n': '使用旧版 KCC 的 PDF/EPUB 图片提取方式。 \n',
+    'Use if standard extraction fails for whatever reason.': '当标准提取因故失败时使用。',
+    'Legacy Extract': '旧版提取',
+    'Wallpaper mode': '壁纸模式',
+    'Auto check various options intended for KOreader wallpapers.\n': '自动勾选适用于 KOreader 壁纸的各项选项。\n',
+    'Will also crop images to fill the screen centered.': '还会居中裁剪图片以填满屏幕。',
+    'Toggle Easy/Expert Mode': '切换简单/专家模式',
+    'Easy/Expert Mode': '简单/专家模式',
+    'Hover over each option/button to see an explanation! Options can be partially checked or fully checked!': '将鼠标悬停在各选项/按钮上可查看说明！选项可半勾选或全勾选！',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - Autodetection<br/></span>The color of margins fill will be detected automatically.</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - White<br/></span>Margins will be untouched.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Black<br/></span>Margins will be filled with black color.</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 自动检测<br/></span>自动检测边距的填充颜色。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 白色<br/></span>不改动边距。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 黑色<br/></span>边距填充为黑色。</p></body></html>',
+    'W/B margins': '黑/白边距',
+    '<html><head/><body><p>Invert the page turn direction.</p><p>Usually used with right to left manga but you want to page turn left to right. Spread splitting would still be right to left in this case.</p><p>Will break various features like landscape mode order.</p></body></html>': '<html><head/><body><p>反转翻页方向。</p><p>通常用于从右向左阅读的漫画、但想从左向右翻页的情况。此时跨页拆分仍为从右向左。</p><p>会破坏横屏模式顺序等一些功能。</p></body></html>',
+    'Invert Direction': '反转方向',
+    '<html><head/><body><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">Unchecked - 4 panels<br/></span>Zoom each corner separately.</p><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">Indeterminate - 2 panels<br/></span>Zoom only the top and bottom of the page.</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - 4 high-quality panels<br/></span>Zoom each corner separately. Try to increase the quality of magnification. Check wiki for more details.</p></body></html>': '<html><head/><body><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">不勾选 - 4 面板<br/></span>分别放大每个角落。</p><p style=\'white-space:pre\'><span style=" font-weight:600; text-decoration: underline;">半勾选 - 2 面板<br/></span>只放大页面的上下两部分。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 4 高清面板<br/></span>分别放大每个角落，并尽量提高放大质量。详见 wiki。</p></body></html>',
+    'Panel View 4/2/HQ': '面板视图 4/2/高清',
+    'Do not rotate double page spreads in spread splitter option.': '在跨页拆分选项中不旋转双页跨页。',
+    'No rotate': '不旋转',
+    "<html><head/><body><p style='white-space:pre'>Enable right-to-left reading.</p></body></html>": "<html><head/><body><p style='white-space:pre'>启用从右向左阅读。</p></body></html>",
+    'Right-to-left (manga)': '从右向左（漫画）',
+    '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">Unchecked - next to source<br/></span>Place output files next to source files</p><p><span style=" font-weight:600; text-decoration: underline;">Indeterminate - folder next to source<br/></span>Place output files in a folder next to source files</p><p><span style=" font-weight:600; text-decoration: underline;">Checked - Custom<br/></span>Place output files in custom directory specified by right button</p></body></html>': '<html><head/><body><p><span style=" font-weight:600; text-decoration: underline;">不勾选 - 源文件旁<br/></span>输出文件放在源文件旁边。</p><p><span style=" font-weight:600; text-decoration: underline;">半勾选 - 源文件旁的文件夹<br/></span>输出文件放在源文件旁边的文件夹中。</p><p><span style=" font-weight:600; text-decoration: underline;">勾选 - 自定义<br/></span>输出文件放在右侧按钮指定的自定义目录。</p></body></html>',
+    'Output Folder': '输出目录',
+    '<html><head/><body><p>Use this to select the default output directory.</p></body></html>': '<html><head/><body><p>用于选择默认输出目录。</p></body></html>',
+    '<html><head/><body><p>By default, KCC maps the darkest pixel value to pure black (the black point.)</p><p>Extreme black point sets the black point to be the most common dark pixel value.</p><p>Useful when text is black but artwork is gray.</p></body></html>': '<html><head/><body><p>默认情况下，KCC 将最暗的像素值映射为纯黑（黑点）。</p><p>极限黑点会把黑点设为最常见的暗色像素值。</p><p>适用于文字为黑色但画面发灰的情况。</p></body></html>',
+    'Extreme Black Point': '极限黑点',
+    'Light novel mode': '轻小说模式',
+    'Use a more compatible 8 bit PNG instead of 4 bit.': '使用兼容性更好的 8 位 PNG 代替 4 位。',
+    'PNG Legacy Mode': 'PNG 兼容模式',
+    '<html><head/><body><p>Force Kindle MOBI to be be tagged as EBOK instead of PDOC.</p><p>This may cause USB loaded books to be deleted if you go online after a month offline.</p></body></html>': '<html><head/><body><p>强制将 Kindle MOBI 标记为 EBOK 而非 PDOC。</p><p>如果离线超过一个月后再联网，可能导致 USB 导入的书籍被删除。</p></body></html>',
+    'Force EBOK': '强制 EBOK',
+    'No Quantize': '不量化',
+    "<html><head/><body><p style='white-space:pre'>Shift+Click to edit directory.</p></body></html>": "<html><head/><body><p style='white-space:pre'>Shift+点击以编辑目录。</p></body></html>",
+    'Metadata Editor': '元数据编辑器',
+    'Humble Bundle Referral': 'Humble Bundle 推广',
+    'Support me on Ko-fi': '在 Ko-fi 上支持作者',
+    'Label Spreads': '标记跨页',
+    'Hold shift while clicking for a low quality preview.': '按住 Shift 点击可生成低画质预览。',
+    '<html><head/><body><p>Warning: chunk size greater than default may cause<br/>performance/battery issues, especially on older devices.</p></body></html>': '<html><head/><body><p>警告：分卷大小超过默认值可能导致<br/>性能/耗电问题，在旧设备上尤其明显。</p></body></html>',
+    'Chunk size MB:': '分卷大小 MB：',
+    'Greater than default may cause performance issues on older ereaders.': '超过默认值可能导致旧款电子阅读器出现性能问题。',
+    'JPEG Quality:': 'JPEG 质量：',
+    '<html><head/><body><p>Double click on source to open it in metadata editor.</p></body></html>': '<html><head/><body><p>双击来源可在元数据编辑器中打开。</p></body></html>',
+    "<html><head/><body><p style='white-space:pre'>Resolution of the target device.</p></body></html>": "<html><head/><body><p style='white-space:pre'>目标设备的分辨率。</p></body></html>",
+    'Custom height:': '自定义高度：',
+    'Custom width:': '自定义宽度：',
+    "<html><head/><body><p style='white-space:pre'>Target device.</p></body></html>": "<html><head/><body><p style='white-space:pre'>目标设备。</p></body></html>",
+    'Clear list': '清空列表',
+    '<html><head/><body><p style=\'white-space:pre\'>Add directory containing JPG, PNG or GIF files to queue.<br/><span style=" font-weight:600;">CBR, CBZ and CB7 files inside will not be processed!</span></p></body></html>': '<html><head/><body><p style=\'white-space:pre\'>将包含 JPG、PNG 或 GIF 文件的目录加入队列。<br/><span style=" font-weight:600;">其中的 CBR、CBZ 和 CB7 文件不会被处理！</span></p></body></html>',
+    'Add input folder(s)': '添加输入文件夹',
+    "<html><head/><body><p style='white-space:pre'>Shift+Click to select the output directory for this list.</p></body></html>": "<html><head/><body><p style='white-space:pre'>Shift+点击以选择此列表的输出目录。</p></body></html>",
+    "<html><head/><body><p style='white-space:pre'>Add CBR, CBZ, CB7 or PDF file to queue.</p></body></html>": "<html><head/><body><p style='white-space:pre'>将 CBR、CBZ、CB7 或 PDF 文件加入队列。</p></body></html>",
+    'Add input file(s)': '添加输入文件',
+    "<html><head/><body><p style='white-space:pre'>Output format.</p></body></html>": "<html><head/><body><p style='white-space:pre'>输出格式。</p></body></html>",
+    'Resize cover to exact device resolution by center-cropping to aspect ratio first.\n': '先将封面按宽高比居中裁剪，再缩放到设备的精确分辨率。\n',
+    'May crop top/bottom or left/right depending on source aspect ratio. Not implemented for Kindle Scribe.': '根据源图宽高比，可能裁掉上下或左右部分。Kindle Scribe 上未实现。',
+    'The JPEG quality, on a scale from 0 (worst) to 95 (best). \n': 'JPEG 质量，范围从 0（最差）到 95（最好）。\n',
+    'Default is 85 for most devices besides Kindle Scribe and Colorsoft, which are 90.\n': '大多数设备默认为 85，Kindle Scribe 和 Colorsoft 为 90。\n',
+    'Higher values are larger and higher quality, and may resolve blank page issues.': '数值越高文件越大、画质越好，并可能解决空白页问题。',
+    'Keep any original ComicInfo.xml files.\n': '保留原始的 ComicInfo.xml 文件。\n',
+    'Keeping this file may crash some readers like the Kobo native CBZ reader.': '保留此文件可能导致某些阅读器（如 Kobo 自带的 CBZ 阅读器）崩溃。',
+    'Only resize images and preserve original file structure.\n': '仅调整图片尺寸并保留原始文件结构。\n',
+    'Ignores most options besides JPEG quality, color mode, output folder.': '除 JPEG 质量、彩色模式、输出目录外，其余大多数选项都会被忽略。',
+    "Don't quantize PNG images to 16 colors (4 bit)\n": '不把 PNG 图片量化到 16 色（4 位）\n',
+    'Keep ComicInfo.xml': '保留 ComicInfo.xml',
+    'This will double file size but preserve all 256 colors (8 bit).\n': '这会使文件体积翻倍，但能保留全部 256 色（8 位）。\n',
+    "Eink only has 16 shades of gray so you probably don't want this.": '墨水屏只有 16 级灰度，所以一般不需要启用此选项。',
+    'Render vector PDFs to device width instead of height.\n': '将矢量 PDF 按设备宽度（而非高度）渲染。\n',
+    'Useful if you plan to crop a little off the top and bottom to fill screen.': '如果你打算裁掉上下少量内容以填满屏幕，此选项很有用。',
+    'Replace JPG with lossy WebP and PNG with lossless WebP. This includes the JPG Quality.\n': '用有损 WebP 替换 JPG、无损 WebP 替换 PNG，JPEG 质量设置同样生效。\n',
+    'Ignored for Kindle EPUB/MOBI and all PDF.': '对 Kindle EPUB/MOBI 和所有 PDF 无效。',
+    'Metadata editor': '元数据编辑器',
+    'Series:': '系列：',
+    'Volume:': '卷：',
+    '<b>Bulk Volume Editing</b><br>Check this box to assign volume numbers to multiple files.<br><br><b>Input formats:</b><br><code>5</code> → sequence starting from 5 (5, 6, 7...)<br><code>1-10</code> → range from 1 to 10<br><code>1, 3, 5</code> → specific values<br><br><i>Note: Files are sorted alphabetically before assignment.</i>': '<b>批量卷号编辑</b><br>勾选此框可为多个文件批量指定卷号。<br><br><b>输入格式：</b><br><code>5</code> → 从 5 开始递增（5、6、7……）<br><code>1-10</code> → 1 到 10 的范围<br><code>1, 3, 5</code> → 指定具体值<br><br><i>注意：文件在指定卷号前会按名称字母排序。</i>',
+    'Number:': '期号：',
+    'Writer:': '编剧：',
+    'Penciller:': '铅笔稿：',
+    'Inker:': '墨线：',
+    'Colorist:': '上色：',
+    'Title:': '标题：',
+    'Save': '保存',
+    'Cancel': '取消',
+    'Error during conversion! Please consult ': '转换出错！请查阅 ',
+    'for more details.': '了解详情。',
+    'Cannot select Kindle as output directory': '不能将 Kindle 选为输出目录',
+    'Editor is disabled due to a lack of 7z.': '因缺少 7z，编辑器已禁用。',
+    '<a href="https://github.com/ciromattia/kcc#7-zip">Install 7z (link)</a>': '<a href="https://github.com/ciromattia/kcc#7-zip">安装 7z（链接）</a>',
+    ' to enable metadata editing.': '以启用元数据编辑。',
+    ' to enable CBZ/CBR/ZIP/etc processing.': '以启用 CBZ/CBR/ZIP 等格式的处理。',
+    'Failed to parse metadata!\n\n%s\n\nTraceback:\n%s': '解析元数据失败！\n\n%s\n\n回溯：\n%s',
+    'You can choose a taller device profile to get taller cuts in webtoon mode.': '在条漫模式下，你可以选择更高的设备配置来获得更高的切割画面。',
+    'Try reading webtoon panels side by side in landscape!': '试试在横屏下并排阅读条漫面板！',
+    'This option is intended for older Kindle models.': '此选项适用于较旧的 Kindle 机型。',
+    'On this device, there will be conversion speed and quality issues.': '在此设备上会有转换速度和画质问题。',
+    'Use the Kindle Scribe profile if you want higher resolution when zooming.': '如果缩放时需要更高分辨率，请使用 Kindle Scribe 配置。',
+    'Scribe PNG MOBI/EPUB has a lot of problems like blank pages/sections. Use JPG instead.': 'Scribe 的 PNG 格式 MOBI/EPUB 存在很多问题（如空白页/空白章节），请改用 JPG。',
+    'Colorsoft MOBI/EPUB can have blank pages. Just go back a few pages, exit, and reenter book.': 'Colorsoft 的 MOBI/EPUB 可能出现空白页。只需回退几页、退出并重新进入书籍即可。',
+    'List of supported Non-Kindle devices.</a>': '支持的非 Kindle 设备列表。</a>',
+    "Partially check W/B Margins if you don't want KCC to extend the image margins.": '如果不希望 KCC 扩展图像边距，请将“黑/白边距”设为半勾选状态。',
+    'The process will be interrupted. Please wait.': '进程将被中断，请稍候。',
+    'No files selected! Please choose files to convert.': '未选择文件！请选择要转换的文件。',
+    'Target resolution is not set!': '未设置目标分辨率！',
+    '<a href="https://github.com/ciromattia/kcc#kindlegen"><b>Install KindleGen (link)</b></a> to enable MOBI conversion for Kindles!': '<a href="https://github.com/ciromattia/kcc#kindlegen"><b>安装 KindleGen（链接）</b></a>以启用 Kindle 的 MOBI 转换！',
+    'Unsupported file type for ': '不支持的文件类型：',
+    '<b>Tip:</b> Hover mouse over options/buttons to see explanations. Boxes can be partially/fully checked.': '<b>提示：</b>将鼠标悬停在选项/按钮上可查看说明。勾选框可半勾选或全勾选。',
+    '<b>Tip:</b> You can drag and drop image folders or comic files/archives into this window to convert.': '<b>提示：</b>你可以将图片文件夹或漫画文件/压缩包拖入此窗口进行转换。',
+    "<b>Tip:</b> Calibre may add margins! USB drop directly into the device's documents folder instead.": '<b>提示：</b>Calibre 可能会添加边距！改用 USB 直接拖入设备的 documents 文件夹即可。',
+    '<b>Tip:</b> You can toggle easy/expert mode using button at top right.': '<b>提示：</b>可使用右上角按钮切换简单/专家模式。',
+    'Since you are a new user of <b>KCC</b> please see few ': '由于你是 <b>KCC</b> 的新用户，请先查看一些',
+    '<a href="https://github.com/ciromattia/kcc/wiki/Important-tips">important tips</a>.': '<a href="https://github.com/ciromattia/kcc/wiki/Important-tips">重要提示</a>。',
+    'Failed to save metadata!\n\n%s\n\nTraceback:\n%s': '保存元数据失败！\n\n%s\n\n回溯：\n%s',
+    'Your <a href="https://www.amazon.com/b?node=23496309011">KindleGen</a>': '你的 <a href="https://www.amazon.com/b?node=23496309011">KindleGen</a>',
+    ' is outdated! MOBI conversion might fail.': ' 版本过旧！MOBI 转换可能失败。',
+    'Source:</b>': '来源：</b>',
+    '\n...and ': '\n……另有 ',
+    ' more': ' 个',
+    'Combining images': '合并图片',
+    'Splitting images': '拆分图片',
 }
 
 _FRAGMENTS = sorted(RUNTIME_ZH.items(), key=lambda kv: -len(kv[0]))
 
-_translator = None
+_translators = []
+
+
+def _load(tr, candidates):
+    for path in candidates:
+        if tr.load(path):
+            return path
+    return None
 
 
 def install_translator(app=None):
-    """装载 .qm 并安装到 QApplication。必须在构建主窗口之前调用。
-
-    优先从 Qt 资源系统读取（打包后的 exe 走这条），
-    其次回退到源码树中的 i18n/kcc_zh_CN.qm（直接跑源码时用）。
-    """
-    global _translator
-    if _translator is not None:
+    """装载中文翻译并安装到 QApplication。必须在构建主窗口之前调用。"""
+    if _translators:
         return True
 
-    candidates = [":/i18n/kcc_zh_CN.qm"]
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidates.append(os.path.join(os.path.dirname(here), "i18n", "kcc_zh_CN.qm"))
-    if getattr(sys, "_MEIPASS", None):
-        candidates.append(os.path.join(sys._MEIPASS, "i18n", "kcc_zh_CN.qm"))
+    if app is None:
+        app = QCoreApplication.instance()
 
-    for path in candidates:
-        tr = QTranslator()
-        if tr.load(path):
-            if app is None:
-                app = QCoreApplication.instance()
-            if app is not None:
-                app.installTranslator(tr)
-            _translator = tr
-            return True
-    return False
+    here = os.path.dirname(os.path.abspath(__file__))
+    meipass = getattr(sys, "_MEIPASS", None)
+    qt_trans = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+
+    # --- KCC 自己的界面翻译 ---
+    ok = False
+    tr = QTranslator()
+    cands = [":/i18n/kcc_zh_CN.qm",
+             os.path.join(os.path.dirname(here), "i18n", "kcc_zh_CN.qm")]
+    if meipass:
+        cands.append(os.path.join(meipass, "i18n", "kcc_zh_CN.qm"))
+    if _load(tr, cands):
+        if app is not None:
+            app.installTranslator(tr)
+        _translators.append(tr)
+        ok = True
+
+    # --- Qt 自带目录：QMessageBox 等标准按钮 ---
+    tr_qt = QTranslator()
+    qt_cands = [":/i18n/qtbase_zh_CN.qm"]
+    if qt_trans:
+        qt_cands.append(os.path.join(qt_trans, "qtbase_zh_CN"))
+    if meipass:
+        qt_cands.append(os.path.join(meipass, "PySide6", "translations", "qtbase_zh_CN"))
+    if _load(tr_qt, qt_cands):
+        if app is not None:
+            app.installTranslator(tr_qt)
+        _translators.append(tr_qt)
+
+    return ok
 
 
 def tr_runtime(text):
