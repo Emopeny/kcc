@@ -26,13 +26,7 @@ on:
 permissions:
   contents: write
 
-env:
-  # 只装 CLI/GUI 真正需要的包，避开 mozjpeg 之类容易编译失败的项
-  PY_DEPS: >-
-    "PySide6<6.10" "Pillow>=11.3.0" "psutil>=7.2.2" "requests>=2.34.2"
-    "python-slugify>=8.0.4,<9.0.0" "packaging>=26.2"
-    "mozjpeg-lossless-optimization>=1.2.0" "natsort>=8.4.0"
-    "numpy>=1.22.4" "PyMuPDF>=1.18.0" "certifi"
+# 依赖直接读仓库自带的 requirements.txt（上游自己的清单），不另维护一份
 
 jobs:
   # ------------------------------------------------------------------
@@ -51,7 +45,7 @@ jobs:
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
-          eval python -m pip install --no-cache-dir ${{ env.PY_DEPS }}
+          python -m pip install --no-cache-dir -r requirements.txt certifi
 
       - name: 编译翻译文件 (.ts -> .qm)
         run: |
@@ -99,7 +93,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          Invoke-Expression "python -m pip install --no-cache-dir $env:PY_DEPS pyinstaller"
+          python -m pip install --no-cache-dir -r requirements.txt certifi pyinstaller
 
       - name: 编译翻译文件并重建资源
         shell: pwsh
@@ -145,7 +139,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq p7zip-full libgl1
           python -m pip install --upgrade pip
-          eval python -m pip install --no-cache-dir ${{ env.PY_DEPS }} pyinstaller
+          python -m pip install --no-cache-dir -r requirements.txt certifi pyinstaller
 
       - name: 编译翻译文件并重建资源
         run: |
