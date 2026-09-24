@@ -53,6 +53,7 @@ from . import metadata
 from . import kindle
 from . import KCC_ui
 from . import KCC_ui_editor
+from .i18n import tr_runtime
 
 
 class QApplicationMessaging(QApplication):
@@ -617,9 +618,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         MW.activateWindow()
 
     def addTrayMessage(self, message, icon):
+        message = tr_runtime(message)
         icon = getattr(QSystemTrayIcon.MessageIcon, icon)
         if self.supportsMessages() and not MW.isActiveWindow():
-            self.showMessage('Kindle Comic Converter', message, icon)
+            self.showMessage(tr_runtime('Kindle Comic Converter'), message, icon)
 
 
 class KCCGUI(KCC_ui.Ui_mainWindow):
@@ -960,7 +962,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
             icon = QIcon()
             icon.addPixmap(QPixmap(":/Other/icons/convert.png"), QIcon.Mode.Normal, QIcon.State.Off)
             GUI.convertButton.setIcon(icon)
-            GUI.convertButton.setText('Convert')
+            GUI.convertButton.setText(tr_runtime('Convert'))
             GUI.centralWidget.setAcceptDrops(True)
         elif enable == 0:
             self.conversionAlive = True
@@ -968,7 +970,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
             icon = QIcon()
             icon.addPixmap(QPixmap(":/Other/icons/clear.png"), QIcon.Mode.Normal, QIcon.State.Off)
             GUI.convertButton.setIcon(icon)
-            GUI.convertButton.setText('Abort')
+            GUI.convertButton.setText(tr_runtime('Abort'))
             GUI.centralWidget.setAcceptDrops(False)
         elif enable == -1:
             self.conversionAlive = True
@@ -1103,16 +1105,16 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
         valueRaw = int(5 * round(float(value) / 5))
         value = '%.2f' % (float(valueRaw) / 100)
         if float(value) <= 0.09:
-            GUI.gammaLabel.setText('Gamma: Auto')
+            GUI.gammaLabel.setText(tr_runtime('Gamma: Auto'))
         else:
-            GUI.gammaLabel.setText('Gamma: ' + str(value))
+            GUI.gammaLabel.setText(tr_runtime('Gamma: ') + str(value))
         GUI.gammaSlider.setValue(valueRaw)
         self.gammaValue = value
 
     def changeCroppingPower(self, value):
         valueRaw = int(5 * round(float(value) / 5))
         value = '%.2f' % (float(valueRaw) / 100)
-        GUI.croppingPowerLabel.setText('Cropping Power: ' + str(value))
+        GUI.croppingPowerLabel.setText(tr_runtime('Cropping Power: ') + str(value))
         GUI.croppingPowerSlider.setValue(valueRaw)
         self.croppingPowerValue = value
 
@@ -1185,6 +1187,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
         return s.get_data()
 
     def addMessage(self, message, icon, replace=False):
+        message = tr_runtime(message)
         if icon != '':
             icon = getattr(self.icons, icon)
             item = QListWidgetItem(icon, '   ' + self.stripTags(message))
@@ -1202,6 +1205,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
         GUI.jobList.scrollToBottom()
 
     def showDialog(self, message, kind):
+        message = tr_runtime(message)
         if kind == 'error':
             QMessageBox.critical(MW, 'KCC - Error', message, QMessageBox.StandardButton.Ok)
         elif kind == 'question':
@@ -1210,6 +1214,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
                                                                       QMessageBox.No))
 
     def updateProgressbar(self, command):
+        command = tr_runtime(command)
         if command == 'tick':
             GUI.progressBar.setValue(GUI.progressBar.value() + 1)
         elif command.isdigit():
@@ -1761,7 +1766,7 @@ class KCCGUI(KCC_ui.Ui_mainWindow):
         if self.windowSize != '0x0':
             x, y = self.windowSize.split('x')
             MW.resize(int(x), int(y))
-        MW.setWindowTitle("Kindle Comic Converter " + __version__)
+        MW.setWindowTitle(tr_runtime("Kindle Comic Converter ") + __version__)
         MW.show()
         MW.raise_()
 
@@ -1832,7 +1837,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
             if parser.format in ['RAR', 'RAR5']:
                 self.editorWidget.setEnabled(False)
                 self.okButton.setEnabled(False)
-                self.statusLabel.setText('CBR files in selection are read-only.')
+                self.statusLabel.setText(tr_runtime('CBR files in selection are read-only.'))
                 return
         
         if self.bulkMode:
@@ -1840,7 +1845,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
             self.parser = metadata.MetadataParser(firstFile)
             self.editorWidget.setEnabled(True)
             self.okButton.setEnabled(True)
-            self.statusLabel.setText(f'Editing {len(self.files)} files.')
+            self.statusLabel.setText(tr_runtime('Editing ') + str(len(self.files)) + tr_runtime(' files.'))
 
             # Show bulk volume checkbox
             self.bulkVolumeCheck.setVisible(True)
@@ -1877,7 +1882,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
                     line.setText(common_value)
                 else:
                     line.setText('')
-                    line.setPlaceholderText('(multiple values)')
+                    line.setPlaceholderText(tr_runtime('(multiple values)'))
                     line.setToolTip(self._buildBulkFieldToolTip(label, valuesByFile))
         else:
             file = self.files[0]
@@ -1893,7 +1898,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
             
             self.editorWidget.setEnabled(True)
             self.okButton.setEnabled(True)
-            self.statusLabel.setText('Separate authors with a comma.')
+            self.statusLabel.setText(tr_runtime('Separate authors with a comma.'))
             
             for field in (self.seriesLine, self.volumeLine, self.numberLine, self.titleLine):
                 field.setText(self.parser.data[field.objectName().capitalize()[:-4]])
@@ -1929,7 +1934,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
                     return
 
             if not bulkData and volumes is None:
-                self.statusLabel.setText('No changes to apply.')
+                self.statusLabel.setText(tr_runtime('No changes to apply.'))
                 return
 
             errors = []
@@ -1938,7 +1943,7 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
             self.cancelButton.setEnabled(False)
 
             for i, file in enumerate(self.files, 1):
-                self.statusLabel.setText(f'Processing {i}/{total}: {os.path.basename(file)}')
+                self.statusLabel.setText(tr_runtime('Processing ') + f'{i}/{total}: {os.path.basename(file)}')
                 QApplication.processEvents()
 
                 try:
@@ -1961,16 +1966,16 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
             if errors:
                 GUI.showDialog("Some files failed to save:\n\n" + "\n".join(errors[:10]) +
                               (f"\n...and {len(errors) - 10} more" if len(errors) > 10 else ""), 'error')
-                self.statusLabel.setText('Errors occurred.')
+                self.statusLabel.setText(tr_runtime('Errors occurred.'))
             else:
-                self.statusLabel.setText(f'Successfully updated {total} files.')
+                self.statusLabel.setText(tr_runtime('Successfully updated ') + str(total) + tr_runtime(' files.'))
                 self.ui.close()
         else:
             for field in (self.volumeLine, self.numberLine):
                 if field.text().isnumeric() or self.cleanData(field.text()) == '':
                     self.parser.data[field.objectName().capitalize()[:-4]] = self.cleanData(field.text())
                 else:
-                    self.statusLabel.setText(field.objectName().capitalize()[:-4] + ' field must be a number.')
+                    self.statusLabel.setText(field.objectName().capitalize()[:-4] + tr_runtime(' field must be a number.'))
                     break
             else:
                 for field in (self.seriesLine, self.titleLine):
@@ -2045,10 +2050,10 @@ class KCCGUI_MetaEditor(KCC_ui_editor.Ui_editorDialog):
         self.volumeLine.setEnabled(checked)
         if checked:
             self.volumeLine.setText('')
-            self.volumeLine.setPlaceholderText('e.g., 5 or 1-10 or 1,3,5')
+            self.volumeLine.setPlaceholderText(tr_runtime('e.g., 5 or 1-10 or 1,3,5'))
         else:
             self.volumeLine.setText('')
-            self.volumeLine.setPlaceholderText('(multiple files)')
+            self.volumeLine.setPlaceholderText(tr_runtime('(multiple files)'))
 
     def __init__(self):
         self.ui = QDialog()

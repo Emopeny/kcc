@@ -35,6 +35,9 @@ def start():
         else:
             KCCAplication.sendMessage('ARISE')
     else:
+        # 必须在构建主窗口之前装载，setupUi() 里的 translate() 才生效
+        from .i18n import install_translator
+        install_translator(KCCAplication)
         KCCWindow = KCC_gui.QMainWindowKCC()
         KCCUI = KCC_gui.KCCGUI(KCCAplication, KCCWindow)
         for i in range(1, len(sys.argv)):

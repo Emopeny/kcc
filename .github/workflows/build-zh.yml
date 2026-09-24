@@ -1,0 +1,180 @@
+name: 构建中文版 KCC
+
+# 在 GitHub 云端产出中文版 KCC 可执行文件，本机不装 Python / PySide6 / PyInstaller。
+# 用法：Actions → 构建中文版 KCC → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "构建目标"
+        required: true
+        type: choice
+        default: "windows,linux"
+        options:
+          - "windows,linux"
+          - "windows"
+          - "linux"
+  push:
+    branches: [master]
+    paths:
+      - "i18n/**"
+      - "kindlecomicconverter/i18n.py"
+      - ".github/workflows/build-zh.yml"
+      - ".github/scripts/verify_zh.py"
+
+permissions:
+  contents: write
+
+env:
+  # 只装 CLI/GUI 真正需要的包，避开 mozjpeg 之类容易编译失败的项
+  PY_DEPS: >-
+    "PySide6<6.10" "Pillow>=11.3.0" "psutil>=7.2.2" "requests>=2.34.2"
+    "python-slugify>=8.0.4,<9.0.0" "packaging>=26.2"
+    "mozjpeg-lossless-optimization>=1.2.0" "natsort>=8.4.0"
+    "numpy>=1.22.4" "PyMuPDF>=1.18.0" "certifi"
+
+jobs:
+  # ------------------------------------------------------------------
+  # 第一步：翻译链路自检。不通过就不浪费时间去打包。
+  # ------------------------------------------------------------------
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          eval python -m pip install --no-cache-dir ${{ env.PY_DEPS }}
+
+      - name: 编译翻译文件 (.ts -> .qm)
+        run: |
+          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          ls -l i18n/
+
+      - name: 自检 A —— 文件系统回退路径
+        run: python .github/scripts/verify_zh.py
+
+      - name: 重建 Qt 资源 (.qrc -> KCC_rc.py)，把 .qm 打进资源系统
+        run: |
+          pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
+          grep -c "i18n" kindlecomicconverter/KCC_rc.py
+
+      - name: 自检 B —— 资源系统路径（打包后走这条）
+        run: |
+          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          python .github/scripts/verify_zh.py
+
+      - name: 上传翻译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: zh-translations
+          path: |
+            i18n/kcc_zh_CN.ts
+            i18n/kcc_zh_CN.qm
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # 第二步：Windows 无签名 exe（上游走 SignPath 签名，fork 上没有密钥）
+  # ------------------------------------------------------------------
+  windows:
+    needs: verify
+    if: contains(inputs.platforms || 'windows,linux', 'windows')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          Invoke-Expression "python -m pip install --no-cache-dir $env:PY_DEPS pyinstaller"
+
+      - name: 编译翻译文件并重建资源
+        shell: pwsh
+        run: |
+          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
+
+      - name: 打包 exe
+        shell: pwsh
+        run: |
+          $v = python -c "import kindlecomicconverter as k; print(k.__version__)"
+          Write-Host "KCC version: $v"
+          pyinstaller --hidden-import=_cffi_backend -y -F --noupx -w `
+            -i icons/comic2ebook.ico -n "KCC_zh_win64_$v" kcc.py
+          pyinstaller --hidden-import=_cffi_backend -y -F --noupx `
+            -i icons/comic2ebook.ico -n "kcc-c2e_zh_win64_$v" kcc-c2e.py
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: 上传 exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: kcc-zh-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # 第三步：Linux 单文件可执行程序
+  # ------------------------------------------------------------------
+  linux:
+    needs: verify
+    if: contains(inputs.platforms || 'windows,linux', 'linux')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full libgl1
+          python -m pip install --upgrade pip
+          eval python -m pip install --no-cache-dir ${{ env.PY_DEPS }} pyinstaller
+
+      - name: 编译翻译文件并重建资源
+        run: |
+          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
+
+      - name: 打包可执行程序
+        run: |
+          V=$(python -c "import kindlecomicconverter as k; print(k.__version__)")
+          echo "KCC version: $V"
+          pyinstaller --hidden-import=_cffi_backend --hidden-import=queue -y -F \
+            -i icons/comic2ebook.ico -n "kcc_zh_linux_$V" kcc.py
+          pyinstaller --hidden-import=_cffi_backend --hidden-import=queue -y -F \
+            -i icons/comic2ebook.ico -n "kcc-c2e_zh_linux_$V" kcc-c2e.py
+          ls -lh dist/
+
+      - name: 冒烟测试 —— 确认 exe 内已含中文翻译
+        run: |
+          # 用打包好的二进制所在环境不可行（GUI 无 CLI），改为验证资源已编译进 KCC_rc.py
+          python - <<'PY'
+          src = open('kindlecomicconverter/KCC_rc.py', encoding='utf-8').read()
+          assert 'kcc_zh_CN' in src, 'KCC_rc.py 里没有中文翻译资源'
+          print('OK: 翻译资源已编译进 KCC_rc.py')
+          PY
+          python .github/scripts/verify_zh.py
+
+      - name: 上传可执行程序
+        uses: actions/upload-artifact@v4
+        with:
+          name: kcc-zh-linux
+          path: dist/*
+          if-no-files-found: error
