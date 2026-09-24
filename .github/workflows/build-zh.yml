@@ -15,6 +15,10 @@ on:
           - "windows,linux"
           - "windows"
           - "linux"
+      release_tag:
+        description: "填了就建 Release 并挂上可执行文件（例如 v11.3.2-zh）；留空只出 Artifacts"
+        required: false
+        default: ""
   push:
     branches: [master]
     paths:
@@ -191,3 +195,59 @@ jobs:
           name: kcc-zh-linux
           path: dist/*
           if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # 第四步：发布到 Release（仅当填了 release_tag）
+  # 在云端下载 artifacts 再上传，本机不参与
+  # ------------------------------------------------------------------
+  release:
+    needs: [verify, windows, linux]
+    if: always() && inputs.release_tag != '' && needs.verify.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: rel
+
+      - name: 发布到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          mkdir -p upload
+          # 去掉 artifact 名那一层目录，统一摊到 upload/
+          find rel -type f \( -name '*.exe' -o -name 'kcc_zh_linux_*' -o -name 'kcc-c2e_zh_linux_*' \) \
+            -exec cp {} upload/ \;
+          ls -lh upload/
+
+          cat > notes.md <<'NOTES'
+          KCC（Kindle Comic Converter）**简体中文版**，在上游基础上做了界面中文化。
+
+          ## 下载哪个
+
+          | 文件 | 说明 |
+          |---|---|
+          | `KCC_zh_win64_*.exe` | Windows 图形界面 |
+          | `kcc-c2e_zh_win64_*.exe` | Windows 命令行 |
+          | `kcc_zh_linux_*` | Linux 图形界面（单文件） |
+          | `kcc-c2e_zh_linux_*` | Linux 命令行（单文件） |
+
+          ## 注意
+
+          - **Windows 版未签名**，首次运行会弹 SmartScreen 警告，点「更多信息」→「仍要运行」。
+          - **Linux 版**需要系统有 Qt 运行库：`libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3`。
+          - 命令行程序（kcc-c2e）的输出提示仍为英文，本次只做了图形界面中文化。
+
+          ## 中文化范围
+
+          - 控件层 128 条：按钮 / 标签 / 菜单 / 提示
+          - 运行时消息 60 条：任务列表 / 对话框 / 托盘通知 / 进度条
+
+          机制与改翻译的方法见仓库 `.github/KCC-ZH.md`。
+          NOTES
+
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "KCC 中文版 $TAG" --notes-file notes.md
+          gh release upload "$TAG" upload/* --clobber
+          echo "已发布: ${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
