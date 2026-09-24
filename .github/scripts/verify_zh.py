@@ -49,8 +49,11 @@ app = QApplication([sys.argv[0]])
 if require_resource:
     from kindlecomicconverter import KCC_rc  # noqa: F401
     for res in (":/i18n/kcc_zh_CN.qm", ":/i18n/qtbase_zh_CN.qm"):
-        ok = QFile(res).exists()
-        print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在\n      实际: {ok}")
+        f = QFile(res)
+        ok = f.exists()
+        size = f.size() if ok else 0
+        print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在"
+              f"\n      实际: {ok} ({size} bytes)")
         if not ok:
             fails.append(f"资源缺失: {res}")
 
@@ -90,13 +93,18 @@ check("croppingPowerLabel.text()", ui.croppingPowerLabel.text(), "裁边强度�
 check("窗口标题", window.windowTitle(), "Kindle 漫画转换器")
 
 # --- 6) Qt 自带目录：消息框标准按钮 ---
+# qtbase 目录可能取不到（回退链全失败时会生成空占位），那种情况下只提示不判失败
+qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size() if require_resource else 1
 box = QMessageBox()
 box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 labels = sorted(b.text() for b in box.buttons())
-print(f"{'OK  ' if all(has_han(x) for x in labels) else 'FAIL'} QMessageBox 标准按钮\n"
-      f"      实际: {labels}")
-if not all(has_han(x) for x in labels):
-    fails.append(f"QMessageBox 标准按钮未中文化: {labels}")
+if qtbase_size > 0:
+    ok = all(has_han(x) for x in labels)
+    print(f"{'OK  ' if ok else 'FAIL'} QMessageBox 标准按钮\n      实际: {labels}")
+    if not ok:
+        fails.append(f"QMessageBox 标准按钮未中文化: {labels}")
+else:
+    print(f"SKIP QMessageBox 标准按钮（qtbase 目录未取到，已优雅降级）\n      实际: {labels}")
 
 # --- 7) 守卫：逻辑键不得被翻译 ---
 ts = os.path.join(ROOT, "i18n", "kcc_zh_CN.ts")
