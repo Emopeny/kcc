@@ -85,9 +85,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir -r requirements.txt certifi
 
-      - name: 编译翻译文件
+      - name: 编译翻译文件并准备 qtbase 中文目录
         if: steps.check.outputs.changed == 'true'
-        run: pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+        run: |
+          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
+          bash .github/scripts/fetch_qtbase.sh
 
       - name: 中文化自检 —— 不过就不推送
         if: steps.check.outputs.changed == 'true'

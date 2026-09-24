@@ -65,7 +65,7 @@ def check_passthrough(label, got, src):
 app = QApplication([sys.argv[0]])
 
 # --- 0) 打包形态检查 ---
-qtbase_size = 1
+res_qtbase_size = 0
 if require_resource:
     from kindlecomicconverter import KCC_rc  # noqa: F401
     for res in (":/i18n/kcc_zh_CN.qm", ":/i18n/qtbase_zh_CN.qm"):
@@ -74,7 +74,19 @@ if require_resource:
         print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在\n      实际: {ok} ({size} bytes)")
         if not ok:
             fails.append(f"资源缺失: {res}")
-    qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size()
+    res_qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size()
+
+
+def qtbase_available():
+    """qtbase 中文目录是否真的能拿到。
+
+    资源系统（打包后）或文件系统（跑源码）任一处存在且非空即算有。
+    拿不到时不应把「标准按钮已中文化」当作硬性断言 —— 那会误判。
+    """
+    if res_qtbase_size > 0:
+        return True
+    p = os.path.join(ROOT, "i18n", "qtbase_zh_CN.qm")
+    return os.path.exists(p) and os.path.getsize(p) > 0
 
 # --- 1) 装载 ---
 check("install_translator()", install_translator(app), True)
@@ -116,13 +128,13 @@ check_zh("窗口标题", window.windowTitle(), "Kindle Comic Converter")
 box = QMessageBox()
 box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 labels = sorted(b.text() for b in box.buttons())
-if qtbase_size > 0:
+if qtbase_available():
     ok = all(has_han(x) for x in labels)
     print(f"{'OK  ' if ok else 'FAIL'} QMessageBox 标准按钮\n      实际: {labels}")
     if not ok:
         fails.append(f"QMessageBox 标准按钮未中文化: {labels}")
 else:
-    print(f"SKIP QMessageBox 标准按钮（qtbase 目录未取到，已优雅降级）\n      实际: {labels}")
+    print(f"SKIP QMessageBox 标准按钮（qtbase 中文目录不可得，已优雅降级）\n      实际: {labels}")
 
 # --- 7) 守卫：逻辑键不得被翻译 ---
 ts = os.path.join(ROOT, "i18n", "kcc_zh_CN.ts")
