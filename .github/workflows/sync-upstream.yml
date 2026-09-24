@@ -13,6 +13,12 @@ on:
     # 每天 UTC 19:00 = 北京时间 03:00
     - cron: "0 19 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "即使上游无更新也触发一次重建（手动刷新 Release 用）"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -95,7 +101,7 @@ jobs:
 
   build:
     needs: sync
-    if: needs.sync.outputs.changed == 'true'
+    if: needs.sync.outputs.changed == 'true' || inputs.force == true
     runs-on: ubuntu-latest
     steps:
       - name: 触发中文版构建并发布 Release
@@ -106,7 +112,11 @@ jobs:
           # 本 job 没有 checkout，gh 无法推断仓库
           export GH_REPO="$GITHUB_REPOSITORY"
           TAG="v${{ needs.sync.outputs.version }}-zh"
-          echo "上游已更新，触发中文版构建；Release tag: $TAG"
+          if [ "${{ needs.sync.outputs.changed }}" = "true" ]; then
+            echo "上游已更新，触发中文版构建；Release tag: $TAG"
+          else
+            echo "上游无更新，这是手动强制重建；Release tag: $TAG"
+          fi
           gh workflow run build-zh.yml -f platforms=windows,linux -f release_tag="$TAG"
           sleep 20
           gh run list --workflow=build-zh.yml --limit 3
