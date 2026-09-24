@@ -5,7 +5,7 @@
     <name>mainWindow</name>
       <message>
         <source>Kindle Comic Converter</source>
-        <translation>Kindle Comic 转换er</translation>
+        <translation>Kindle 漫画转换器</translation>
       </message>
       <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Double click on source to open it in metadata editor.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -73,7 +73,7 @@
       </message>
       <message>
         <source>Convert</source>
-        <translation>转换</translation>
+        <translation>开始转换</translation>
       </message>
       <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p style='white-space:pre'&gt;&lt;span style=" font-weight:600; text-decoration: underline;"&gt;Unchecked - 4 panels&lt;br/&gt;&lt;/span&gt;Zoom each corner separately.&lt;/p&gt;&lt;p style='white-space:pre'&gt;&lt;span style=" font-weight:600; text-decoration: underline;"&gt;Indeterminate - 2 panels&lt;br/&gt;&lt;/span&gt;Zoom only the top and bottom of the page.&lt;/p&gt;&lt;p&gt;&lt;span style=" font-weight:600; text-decoration: underline;"&gt;Checked - 4 high-quality panels&lt;br/&gt;&lt;/span&gt;Zoom each corner separately. Try to increase the quality of magnification. Check wiki for more details.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>

@@ -66,7 +66,7 @@ RUNTIME_ZH = {
     'Abort': '中止',
     'Gamma: Auto': '伽马：自动',
     'Gamma: ': '伽马：',
-    'Cropping Power: ': '裁边强度：',
+    'Cropping Power: ': '裁剪力度：',
     'CBR files in selection are read-only.': '所选内容中的 CBR 文件为只读。',
     'Editing ': '正在编辑 ',
     ' files.': ' 个文件。',

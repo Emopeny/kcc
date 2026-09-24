@@ -2,14 +2,17 @@
 # -*- coding: utf-8 -*-
 """验证 KCC 中文化是否真正生效。
 
+断言方式以「语义」为主：译文必须与英文原文不同且含汉字。
+这样调整具体用词不会导致自检误报，适配跟随上游自动重建的场景。
+
 检查项：
   0. （加 --require-resource 时）翻译文件必须已进入 Qt 资源系统
   1. 翻译文件能否装载
-  2. 控件层：Qt translate() 是否返回中文
+  2. 控件层：Qt translate() 是否已中文化
   3. 运行时层：整串 / 片段替换 / 拼接消息 / 控制指令透传
   4. 真实界面：用生成的 Ui_mainWindow 构建窗口，断言控件文字
-  5. 原生对话框：文件对话框标题、消息框标题
-  6. Qt 自带目录：QMessageBox 标准按钮已中文化
+  5. 原生对话框：文件对话框标题与过滤器、消息框标题
+  6. Qt 自带目录：QMessageBox 标准按钮已中文化（qtbase 取不到时只提示）
   7. 守卫：设备名 / 格式名是程序逻辑键，绝不能被翻译
 
 任一条不成立即退出码非 0。
@@ -32,6 +35,10 @@ from kindlecomicconverter.i18n import install_translator, tr_runtime  # noqa: E4
 fails = []
 
 
+def has_han(s):
+    return any("\u4e00" <= ch <= "\u9fff" for ch in s)
+
+
 def check(label, got, want):
     ok = got == want
     print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
@@ -39,47 +46,60 @@ def check(label, got, want):
         fails.append(f"{label}: 期望 {want!r}, 实际 {got!r}")
 
 
-def has_han(s):
-    return any("\u4e00" <= ch <= "\u9fff" for ch in s)
+def check_zh(label, got, src):
+    """语义断言：已中文化 = 与原文不同且含汉字。"""
+    ok = got != src and has_han(got)
+    print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
+    if not ok:
+        fails.append(f"{label}: 未中文化（原文 {src!r} → 实际 {got!r}）")
+
+
+def check_passthrough(label, got, src):
+    """控制指令 / 纯数字必须原样透传。"""
+    ok = got == src
+    print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
+    if not ok:
+        fails.append(f"{label}: 应原样透传，实际 {got!r}")
 
 
 app = QApplication([sys.argv[0]])
 
 # --- 0) 打包形态检查 ---
+qtbase_size = 1
 if require_resource:
     from kindlecomicconverter import KCC_rc  # noqa: F401
     for res in (":/i18n/kcc_zh_CN.qm", ":/i18n/qtbase_zh_CN.qm"):
         f = QFile(res)
-        ok = f.exists()
-        size = f.size() if ok else 0
-        print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在"
-              f"\n      实际: {ok} ({size} bytes)")
+        ok, size = f.exists(), (f.size() if f.exists() else 0)
+        print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在\n      实际: {ok} ({size} bytes)")
         if not ok:
             fails.append(f"资源缺失: {res}")
+    qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size()
 
 # --- 1) 装载 ---
 check("install_translator()", install_translator(app), True)
 
 # --- 2) 控件层 ---
-check('translate("mainWindow", "Convert")',
-      QCoreApplication.translate("mainWindow", "Convert"), "开始转换")
-check('translate("mainWindow", "Preserve Margin %")',
-      QCoreApplication.translate("mainWindow", "Preserve Margin %"), "保留边距 %")
-check('translate("editorDialog", "Cancel")',
-      QCoreApplication.translate("editorDialog", "Cancel"), "取消")
+check_zh('translate("mainWindow", "Convert")',
+         QCoreApplication.translate("mainWindow", "Convert"), "Convert")
+check_zh('translate("mainWindow", "Preserve Margin %")',
+         QCoreApplication.translate("mainWindow", "Preserve Margin %"), "Preserve Margin %")
+check_zh('translate("editorDialog", "Cancel")',
+         QCoreApplication.translate("editorDialog", "Cancel"), "Cancel")
 
 # --- 3) 运行时层 ---
-check("整句", tr_runtime("Creating EPUB files"), "正在生成 EPUB 文件")
-check("片段替换", tr_runtime("[1/3] Processing images"), "[1/3] 正在处理图片")
-check("拼接消息", tr_runtime("Created fusion at /tmp/x.cbz"), "已生成合并文件：/tmp/x.cbz")
-check("控制指令透传", tr_runtime("tick"), "tick")
-check("数字透传", tr_runtime("42"), "42")
+check_zh("运行时整句", tr_runtime("Creating EPUB files"), "Creating EPUB files")
+check_zh("运行时片段替换", tr_runtime("[1/3] Processing images"), "[1/3] Processing images")
+check_zh("运行时拼接消息", tr_runtime("Created fusion at /tmp/x.cbz"),
+         "Created fusion at /tmp/x.cbz")
+check_passthrough("控制指令透传", tr_runtime("tick"), "tick")
+check_passthrough("数字透传", tr_runtime("42"), "42")
 
-# --- 5) 原生对话框标题 ---
-check("文件对话框标题", tr_runtime("Select file"), "选择文件")
-check("文件对话框过滤器",
-      tr_runtime("Comic (*.pdf);;All (*.*)"), "漫画文件 (*.pdf);;全部文件 (*.*)")
-check("消息框标题", tr_runtime("KCC - Error"), "KCC - 错误")
+# --- 5) 原生对话框 ---
+check_zh("文件对话框标题", tr_runtime("Select file"), "Select file")
+check_zh("文件对话框过滤器", tr_runtime("Comic (*.pdf);;All (*.*)"),
+         "Comic (*.pdf);;All (*.*)")
+check_zh("消息框标题", tr_runtime("KCC - Error"), "KCC - Error")
 
 # --- 4) 真实界面 ---
 from kindlecomicconverter import KCC_ui  # noqa: E402
@@ -87,14 +107,12 @@ from kindlecomicconverter import KCC_ui  # noqa: E402
 window = QMainWindow()
 ui = KCC_ui.Ui_mainWindow()
 ui.setupUi(window)
-check("convertButton.text()", ui.convertButton.text(), "开始转换")
-check("gammaLabel.text()", ui.gammaLabel.text(), "伽马：自动")
-check("croppingPowerLabel.text()", ui.croppingPowerLabel.text(), "裁边强度：")
-check("窗口标题", window.windowTitle(), "Kindle 漫画转换器")
+check_zh("convertButton.text()", ui.convertButton.text(), "Convert")
+check_zh("gammaLabel.text()", ui.gammaLabel.text(), "Gamma: Auto")
+check_zh("croppingPowerLabel.text()", ui.croppingPowerLabel.text(), "Cropping power:")
+check_zh("窗口标题", window.windowTitle(), "Kindle Comic Converter")
 
 # --- 6) Qt 自带目录：消息框标准按钮 ---
-# qtbase 目录可能取不到（回退链全失败时会生成空占位），那种情况下只提示不判失败
-qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size() if require_resource else 1
 box = QMessageBox()
 box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 labels = sorted(b.text() for b in box.buttons())
