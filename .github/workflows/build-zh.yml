@@ -214,6 +214,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # 本 job 没有 checkout，gh 无法推断仓库，用 Actions 自带的 GITHUB_REPOSITORY 指定
+          export GH_REPO="$GITHUB_REPOSITORY"
           TAG="${{ inputs.release_tag }}"
           mkdir -p upload
           # 去掉 artifact 名那一层目录，统一摊到 upload/
