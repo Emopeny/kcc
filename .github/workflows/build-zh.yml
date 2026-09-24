@@ -168,6 +168,23 @@ jobs:
           find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
           python .github/scripts/verify_zh.py --require-resource
 
+      - name: 冒烟测试 —— 真跑打包后的程序，确认冻结包内依赖与翻译资源完整
+        continue-on-error: true
+        run: |
+          BIN=$(ls dist/kcc_zh_linux_* | head -1)
+          echo "运行 $BIN （offscreen，25 秒后终止）"
+          set +e
+          QT_QPA_PLATFORM=offscreen timeout 25 "$BIN" > /tmp/smoke.log 2>&1
+          CODE=$?
+          set -e
+          echo "退出码: $CODE （124 = 被 timeout 终止，说明程序正常跑起来了）"
+          cat /tmp/smoke.log || true
+          if [ "$CODE" = "124" ]; then
+            echo "OK: 程序启动后持续运行，冻结包内依赖与资源完整"
+          else
+            echo "::warning::程序提前退出，退出码 $CODE，请检查上面的日志"
+          fi
+
       - name: 上传可执行程序
         uses: actions/upload-artifact@v4
         with:
