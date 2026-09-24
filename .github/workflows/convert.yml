@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - name: Checkout (fork: Emopeny/kcc)
+      - name: Checkout fork repo
         uses: actions/checkout@v4
 
       - name: Setup Python
