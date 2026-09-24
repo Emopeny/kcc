@@ -84,3 +84,29 @@
 - 新增 4 个文件（`i18n/kcc_zh_CN.ts`、`kindlecomicconverter/i18n.py`、构建工作流、自检脚本）
 - 改动 3 个文件，共约 20 行：
   `gui/KCC.qrc`（+1 行资源）、`startup.py`（+3 行）、`KCC_gui.py`（+24 处 `tr_runtime` 调用）
+
+## 跟随上游自动中文化
+
+`.github/workflows/sync-upstream.yml` —— 上游更新后自动重新中文化编译，全在 GitHub 云端跑。
+
+- **触发**：每天 UTC 19:00（北京时间 03:00）定时检查；也可手动 `Run workflow`
+- **判断上游是否有更新**：用 git 祖先关系，不需要额外存状态文件
+  （`upstream/master` 是 `HEAD` 的祖先 → 已合过；否则就是有新提交）
+- **流程**：
+  1. 检出 fork，拉取上游 `ciromattia/kcc`
+  2. 有新提交则 `git merge upstream/master` —— 冲突会直接失败，不会带着坏结果往下走
+  3. 装依赖、`lrelease` 编译翻译、跑 `verify_zh.py` 中文化自检
+  4. **自检通过才推送**；然后触发 `build-zh.yml` 重建并发布 Release
+  5. 无更新则跳过，不空跑构建
+
+- **Release tag 规则**：`v<上游版本号>-zh`。上游升版本号 → 出新 Release；
+  版本号未变但只有零散提交 → 刷新同一个 Release（`upload --clobber`）。
+- **手动强制重建**：手动触发时把 `force` 打开，即使上游无更新也会重建并刷新 Release。
+
+### 注意
+
+- 上游若改动了被中文化补丁锚定的代码行（`KCC_gui.py` 的 4 个 funnel、`startup.py`、
+  `gui/KCC.qrc`），`git merge` 会冲突并让工作流失败 —— 这是**故意**的，
+  宁可停下来让人处理，也不要静默产出半中文化的版本。
+- GitHub 对 fork 的定时工作流有默认限制。若次日 03:00 没有自动跑，
+  到仓库 `Actions` 页把 `跟随上游自动中文化` 启用一次即可。
