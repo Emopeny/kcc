@@ -33,7 +33,7 @@ KCC's main goal is maximum image quality at significantly smaller file size. For
 
 2) fixes black levels to avoid gray/faded blacks found in many Kindle Store manga
 
-![black](images/blacktext.jpeg)
+![black](images/blackx.jpeg)
 
 3) fixes [the rainbow effect on Kaleido 3 color eink](https://www.youtube.com/watch?v=Dw2HTJCGMhw) without blur:
 
@@ -55,7 +55,7 @@ You can view the split halves either before or after combined spreads:
 
 Just drop your input files into the KCC window, hit convert, and USB drop the output files onto your device's `documents` folder!
 
-![settings](images/easy.png)
+![settings](images/easy_small.png)
 
 There are a lot of options, but most people only care about the ones checked above.
 
@@ -158,7 +158,7 @@ For flatpak, Docker, and AppImage versions, refer to the wiki: https://github.co
   - May happen when [using PNG with Kindle Scribe](https://github.com/ciromattia/kcc/issues/665) or [any format with a Kindle Colorsoft](https://github.com/ciromattia/kcc/issues/768). Solve by using JPG with Kindle Scribe or buying a Kobo Colour. Happens more often when turning pages really fast. You can try PDF output.
     Going back a few pages and exiting and re-entering book should fix it temporarily.
 - What output format should I use?
-  - MOBI for Kindles. CBZ for Kindle DX. CBZ for Koreader. KEPUB for Kobo. PDF for ReMarkable or Kindle Scribe 2025.
+  - MOBI for modern Kindles. [CBZ for KF7 Kindles](https://ebooks.stackexchange.com/questions/173/how-to-use-the-e-ink-kindle-readers-to-display-photos) like the Kindle 1/2/3/DX. CBZ for Koreader. KEPUB for Kobo (Kobo profile + EPUB = KEPUB). PDF for ReMarkable or Kindle Scribe 2025.
 - Where is KEPUB option?
   - Choosing a Kobo profile and EPUB output will output KEPUB.
 - All options have additional information in tooltips if you hover over the option.
