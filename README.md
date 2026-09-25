@@ -55,7 +55,7 @@ You can view the split halves either before or after combined spreads:
 
 Just drop your input files into the KCC window, hit convert, and USB drop the output files onto your device's `documents` folder!
 
-![settings](images/easy.png)
+![settings](images/easy_small.png)
 
 There are a lot of options, but most people only care about the ones checked above.
 
