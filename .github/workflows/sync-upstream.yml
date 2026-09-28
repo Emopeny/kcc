@@ -7,6 +7,10 @@ name: 跟随上游自动中文化
 #
 # 判断"上游是否有更新"用的是 git 祖先关系，不需要额外存状态文件：
 # 如果 upstream/master 是 HEAD 的祖先，说明已经合过；否则就是有新提交。
+#
+# 冲突消解：本 fork 自己动过的文件（README.md、gui/KCC.qrc）和上游撞行是常态，
+# 裸 merge 会每天卡死。所以合并走 .github/scripts/merge_upstream.sh，
+# 按白名单自动消解；白名单外的冲突才失败并列出 diff 等人处理。
 
 on:
   schedule:
@@ -63,8 +67,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::上游有新提交，开始合并"
-            # 合并冲突会在这里直接失败，不会带着坏结果往下走
-            git merge upstream/master --no-edit
+            # 冲突按白名单自动消解（README.md 跟上游、gui/KCC.qrc 两边合并）；
+            # 白名单外的冲突会在这里直接失败，不会带着坏结果往下走。
+            bash .github/scripts/merge_upstream.sh upstream/master
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
