@@ -32,6 +32,7 @@
     <file>../icons/kofi_symbol.png</file>
     <file>../icons/Humble_H-Red.png</file>
     <file>../icons/Bindle_Red.png</file>
+    <file>../icons/fanatical.png</file>
   </qresource>
   <qresource prefix="i18n">
     <file alias="kcc_zh_CN.qm">../i18n/kcc_zh_CN.qm</file>
