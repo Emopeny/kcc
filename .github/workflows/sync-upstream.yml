@@ -11,6 +11,10 @@ name: 跟随上游自动中文化
 # 冲突消解：本 fork 自己动过的文件（README.md、gui/KCC.qrc）和上游撞行是常态，
 # 裸 merge 会每天卡死。所以合并走 .github/scripts/merge_upstream.sh，
 # 按白名单自动消解；白名单外的冲突才失败并列出 diff 等人处理。
+#
+# 另一层限制：GITHUB_TOKEN 没有 workflows 权限，凡是改 .github/workflows/**
+# 的提交 push 一律被拒。所以上游改的工作流文件默认不跟进（保 fork 版），
+# 只在 job summary 里列报。中文版构建走本 fork 自己的 build-zh.yml，不受影响。
 
 on:
   schedule:
