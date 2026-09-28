@@ -12,9 +12,13 @@ name: 跟随上游自动中文化
 # 裸 merge 会每天卡死。所以合并走 .github/scripts/merge_upstream.sh，
 # 按白名单自动消解；白名单外的冲突才失败并列出 diff 等人处理。
 #
-# 另一层限制：GITHUB_TOKEN 没有 workflows 权限，凡是改 .github/workflows/**
-# 的提交 push 一律被拒。所以上游改的工作流文件默认不跟进（保 fork 版），
-# 只在 job summary 里列报。中文版构建走本 fork 自己的 build-zh.yml，不受影响。
+# 推送令牌：GITHUB_TOKEN 是 GitHub App 令牌，改 .github/workflows/** 的提交必被拒
+# （refusing to allow a GitHub App to create or update workflow ... without workflows permission；
+#  permissions 块里压根没有 workflows 这个键，留 ref 判定，改分支也一样拒）。
+# 所以推送用 secret SYNC_PUSH_TOKEN —— 需带 workflow 权限的令牌：
+#   经典 PAT 勾 workflow scope；或细粒度 PAT 给 Contents: Read/Write + Workflows: Read/Write（仅此仓库）。
+# 上游改的工作流文件因此能一起自动跟进（WORKFLOWS_POLICY=theirs）。
+# 换令牌：gh secret set SYNC_PUSH_TOKEN -R Emopeny/kcc （值从 stdin 读，别写进命令行）
 
 on:
   schedule:
@@ -24,6 +28,11 @@ on:
     inputs:
       force:
         description: "完整预演整条链路（含中文化自检）并触发重建；上游无更新时不推送合并"
+        required: false
+        type: boolean
+        default: false
+      sync_workflows:
+        description: "把 .github/workflows 下的上游文件强制拉成上游当前版本并推送（补历史漏跟的改动）"
         required: false
         type: boolean
         default: false
@@ -40,10 +49,22 @@ jobs:
       changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - name: 检出 fork
+      - name: 校验推送令牌
+        env:
+          SYNC_PUSH_TOKEN: ${{ secrets.SYNC_PUSH_TOKEN }}
+        run: |
+          if [ -z "${SYNC_PUSH_TOKEN:-}" ]; then
+            echo "::error::缺 secret SYNC_PUSH_TOKEN。上游改工作流文件时，用 GITHUB_TOKEN 推送必被拒；"
+            echo "::error::请先 gh secret set SYNC_PUSH_TOKEN -R $GITHUB_REPOSITORY（带 workflow 权限的令牌）。"
+            exit 1
+          fi
+          echo "推送令牌已配置（长度 ${#SYNC_PUSH_TOKEN}）"
+
+      - name: 检出 fork（用带 workflow 权限的令牌，否则推不动工作流文件）
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.SYNC_PUSH_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -57,6 +78,8 @@ jobs:
 
       - name: 拉取上游并判断是否有更新
         id: check
+        env:
+          WORKFLOWS_POLICY: theirs
         run: |
           set -euo pipefail
           git checkout -B master origin/master
@@ -71,8 +94,8 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::上游有新提交，开始合并"
-            # 冲突按白名单自动消解（README.md 跟上游、gui/KCC.qrc 两边合并）；
-            # 白名单外的冲突会在这里直接失败，不会带着坏结果往下走。
+            # 冲突按白名单自动消解（README.md 跟上游、gui/KCC.qrc 两边合并、
+            # .github/workflows 跟上游）；白名单外的冲突会直接失败，不带坏结果往下走。
             bash .github/scripts/merge_upstream.sh upstream/master
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -104,11 +127,29 @@ jobs:
         if: steps.check.outputs.changed == 'true' || inputs.force == true
         run: python .github/scripts/verify_zh.py
 
-      - name: 推送合并结果
-        if: steps.check.outputs.changed == 'true'
+      - name: 把上游的工作流文件同步过来（手动触发时）
+        if: inputs.sync_workflows == true
         run: |
+          set -euo pipefail
+          # 只覆盖上游存在的那几个文件；本 fork 自己的 build-zh.yml / convert.yml /
+          # sync-upstream.yml 上游没有，不受影响
+          git checkout upstream/master -- .github/workflows
+          if git diff --cached --quiet; then
+            echo "::notice::上游工作流文件与本 fork 一致，无需同步"
+          else
+            git diff --cached --stat
+            git commit -m "chore(ci): 同步上游工作流文件到 $(git rev-parse --short upstream/master)"
+            echo "::notice::已按上游版本更新工作流文件"
+          fi
+
+      - name: 推送合并结果
+        if: steps.check.outputs.changed == 'true' || inputs.sync_workflows == true
+        run: |
+          set -euo pipefail
           git push origin master
-          echo "已推送合并结果，HEAD: $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          HEAD_SHORT=$(git rev-parse --short HEAD)
+          echo "已推送，HEAD: $HEAD_SHORT" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::已推送到 master，HEAD: $HEAD_SHORT"
 
   build:
     needs: sync

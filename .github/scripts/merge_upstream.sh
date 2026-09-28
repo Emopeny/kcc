@@ -10,10 +10,10 @@
 # 2) GITHUB_TOKEN 是 GitHub App 令牌，没有 workflows 权限：
 #    只要合并结果动了 .github/workflows/**，push 一律被拒
 #       refusing to allow a GitHub App to create or update workflow ... without workflows permission
-#    （按 ref 判定的，改分支也一样拒）。所以默认「工作流文件保 fork 版」，
-#    上游那边的改动只做列报，不自动跟进。
-#    想让它自动跟进：把 push 用的令牌换成带 workflow 权限的 PAT，
-#    并设 WORKFLOWS_POLICY=theirs。
+#    （按 ref 判定的，改分支也一样拒。permissions 块里没有 workflows 这个键，加不出来。）
+#    处置：推送用带 workflow 权限的令牌（secret SYNC_PUSH_TOKEN），工作流文件照常跟上游。
+#    默认 WORKFLOWS_POLICY=ours（保 fork 版）是给「没有该令牌、在本地裸跑」的情形兜底；
+#    正式工作流里显式设成 theirs。
 #
 # 白名单之外的冲突一律硬失败（先 merge --abort 再退出），绝不把坏结果推上去。
 #
@@ -43,6 +43,19 @@ for f in "${conflicts[@]:-}"; do
   case "$f" in
     README.md)
       if [ "$README_POLICY" = "ours" ]; then
+        git checkout --ours -- "$f"
+        side="保留 fork 版"
+      else
+        git checkout --theirs -- "$f"
+        side="跟随上游版"
+      fi
+      git add -- "$f"
+      resolved+=("- \`$f\` —— $side")
+      ;;
+
+    .github/workflows/*)
+      # 工作流文件：跟上游（push 令牌必须带 workflow 权限，否则 GitHub 直接拒）
+      if [ "$WORKFLOWS_POLICY" = "ours" ]; then
         git checkout --ours -- "$f"
         side="保留 fork 版"
       else
