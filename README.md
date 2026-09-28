@@ -36,7 +36,7 @@ KCC's main goal is maximum image quality at significantly smaller file size. For
 
 ![black](images/black_white2.jpeg)
 
-3) fixes [the rainbow effect on Kaleido 3 color eink](https://www.youtube.com/watch?v=Dw2HTJCGMhw) without blur:
+3) fixes [the rainbow effect on Kaleido 3 color eink](https://www.youtube.com/watch?v=Dw2HTJCGMhw) without blur using a 2D Discrete Fourier Transform:
 
 ![rainbow](images/rainbow720.jpeg)
 
@@ -86,7 +86,7 @@ Jailbreaking to use KOreader is optional. MOBI manga converted by KCC can be ope
 
 But if you jailbreak your Kindle, you'll unlock additional features like:
 
-1) compatibility with image formats better suited for manga like 4-bit PNG and WEBP. This enables better quality at **half the file size** compared to JPG which must be 8-bit.
+1) compatibility with image formats better suited for manga like dithered 4-bit PNG and WEBP. This enables better quality at **half the file size** compared to JPG which must be 8-bit.
    This is visually lossless since eink screens are 4-bit.
 2) no dependency on kindlegen, which can mean **twice as fast conversions** since you can convert to CBZ directly.
 3) You can dither by partially checking the JPG/PNG box and can crop in KCC instead of KOreader. This may increase page turn speed and battery.
@@ -139,9 +139,9 @@ Click on **Assets** of the latest release.
 You probably want either
 - `KCC_*.*.*.exe` (Windows)
 - `kcc_macos_arm_*.*.*.dmg` (recent Mac with Apple Silicon M1 chip or later)
-- `kcc_macos_i386_*.*.*.dmg` (older Mac with Intel chip macOS 14+)
+- `kcc_macos_i386_*.*.*.dmg` (older Mac with Intel chip macOS 10.14+)
 
-There are also legacy macOS 10.14+ and Windows 7 experimental versions available.
+There are also various builds for niche platforms like Windows 7, Windows 11 ARM, 
 
 The `c2e` and `c2p` versions are command line tools for power users.
 
