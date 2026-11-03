@@ -113,7 +113,7 @@ for source in [
     "Creating EPUB files",
     "Conversion interrupted.",
     "Attempting file fusion",
-    "Kindle Comic Converter",
+    "All jobs completed.",
 ]:
     check_zh(f"translate('KCCGUI', {source!r})",
              QCoreApplication.translate("KCCGUI", source), source)
