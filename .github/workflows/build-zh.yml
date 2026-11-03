@@ -22,11 +22,9 @@ on:
         description: "填了就建 Release 并挂上可执行文件（例如 v12.1.5-zh）；留空只出 Artifacts"
         required: false
         default: ""
-  push:
-    branches: [master]
-    paths:
-      - "translations/**"
-      - ".github/zh_overrides.json"
+# 不再挂 push 触发：GitHub 会因为 fork 的 Actions 用量把整套工作流自动停掉，
+# 所以构建一律由 sync-upstream 在「上游版本号变了」时 dispatch（见 sync-upstream.yml），
+# 或手动 Run workflow。
 
 permissions:
   contents: write

@@ -165,10 +165,24 @@ jobs:
           export GH_REPO="$GITHUB_REPOSITORY"
           TAG="v${{ needs.sync.outputs.version }}-zh"
           if [ "${{ needs.sync.outputs.changed }}" = "true" ]; then
-            echo "上游已更新，触发中文版构建；Release tag: $TAG"
+            echo "上游已更新；Release tag: $TAG"
           else
             echo "上游无更新，这是手动强制重建；Release tag: $TAG"
           fi
+
+          # 版本号没变、Release 已存在 → 不重建。这个 fork 因为 Actions 用量被 GitHub
+          # 自动停过一次（2026-10-14），每天都跑 windows+linux 双平台打包很容易再触发。
+          if [ "${{ inputs.force }}" != "true" ] && gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::$TAG 已存在且版本未变，跳过重建（要重建就手动触发并打开 force）"
+            {
+              echo "## 上游合并完成"
+              echo
+              echo "- 已合并上游提交，中文化自检通过"
+              echo "- 版本仍是 \`${{ needs.sync.outputs.version }}\`，\`$TAG\` 已存在，按策略跳过重建"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           gh workflow run build-zh.yml -f platforms=windows,linux -f release_tag="$TAG"
           sleep 20
           gh run list --workflow=build-zh.yml --limit 3

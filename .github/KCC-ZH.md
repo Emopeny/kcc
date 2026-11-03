@@ -121,5 +121,11 @@
 121|
 122|- GitHub 对 fork 的定时工作流有默认限制。若次日 03:00 没跑，到 `Actions` 页把
 123|  「跟随上游自动中文化」/「构建中文版 KCC」启用一次即可。
-124|- 上游若改了 `i18n.py` 的结构（例如 `DEFAULT_LANGUAGE` 改名），`set_zh_default.py`
-125|  会直接报错失败 —— 这是故意的，宁可停下来，也不要静默出一个默认英文的「中文版」。
+- 上游若改了 `i18n.py` 的结构（例如 `DEFAULT_LANGUAGE` 改名），`set_zh_default.py`
+  会直接报错失败 —— 这是故意的，宁可停下来，也不要静默出一个默认英文的「中文版」。
+- **GitHub 会因为 fork 的 Actions 用量把整套工作流自动停掉**（表现为推送不触发、dispatch 报
+  `422 Actions has been disabled for this repository`，而 API 里 `actions/permissions` 仍显示
+  `enabled: true`、workflow 仍是 `active` —— 别被这两个探针误导）。2026-10-14 本仓库就中过一次，
+  之后 20 天没有任何运行。恢复：打开 <https://github.com/Emopeny/kcc/actions> 点横幅上的
+  「Enable workflows」。所以构建策略刻意收敛：**上游版本号没变就不重建**（`sync-upstream.yml` 会跳过），
+  `build-zh.yml` 也不挂 push 触发。
