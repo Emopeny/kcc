@@ -21,9 +21,8 @@ name: 跟随上游自动中文化
 # 换令牌：gh secret set SYNC_PUSH_TOKEN -R Emopeny/kcc （值从 stdin 读，别写进命令行）
 
 on:
-  schedule:
-    # 每天 UTC 19:00 = 北京时间 03:00
-    - cron: "0 19 * * *"
+  # 2026-11-03 项目已关闭：上游 ciromattia/kcc 自带中文，本 fork 停更。
+  # 定时任务已撤掉，只保留手动触发（仓库归档后也不会再自动运行）。
   workflow_dispatch:
     inputs:
       force:
