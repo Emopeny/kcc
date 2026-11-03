@@ -12,6 +12,10 @@ import os
 import re
 import sys
 
+# Windows 运行器默认 cp1252，中文 print 会 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TARGET = os.path.join(ROOT, "kindlecomicconverter", "i18n.py")
 PATTERN = re.compile(r"^DEFAULT_LANGUAGE\s*=\s*(['\"])(?P<value>\w+)\1", re.MULTILINE)

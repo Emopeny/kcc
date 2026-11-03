@@ -14,6 +14,10 @@ translations/kcc_zh_CN.ts（上游维护，会持续加串）。本 fork 只维�
 import json
 import os
 import sys
+
+# Windows 运行器默认 cp1252，中文 print 会 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

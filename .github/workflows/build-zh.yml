@@ -38,6 +38,8 @@ jobs:
   # ------------------------------------------------------------------
   verify:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +92,8 @@ jobs:
     needs: verify
     if: contains(inputs.platforms || 'windows,linux', 'windows')
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"   # Windows 运行器的 stdio 默认 cp1252，中文 print 会炸
     steps:
       - uses: actions/checkout@v4
 
@@ -139,6 +143,8 @@ jobs:
     needs: verify
     if: contains(inputs.platforms || 'windows,linux', 'linux')
     runs-on: ubuntu-22.04
+    env:
+      PYTHONUTF8: "1"   # Windows 运行器的 stdio 默认 cp1252，中文 print 会炸
     steps:
       - uses: actions/checkout@v4
 
