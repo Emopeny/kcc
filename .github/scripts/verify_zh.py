@@ -1,36 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""验证 KCC 中文化是否真正生效。
+"""验证「中文版 KCC」是否真的中文化。
 
-断言方式以「语义」为主：译文必须与英文原文不同且含汉字。
-这样调整具体用词不会导致自检误报，适配跟随上游自动重建的场景。
+上游 12.1.x 起自带多语言：源码里的文案全部走 Qt 的 translate() 机制，
+翻译表在 translations/kcc_zh_CN.ts，构建时 lrelease 编译成 .qm，
+再由 rcc 编进资源系统 :/i18n/kcc_zh_CN.qm。
 
-检查项：
-  0. （加 --require-resource 时）翻译文件必须已进入 Qt 资源系统
-  1. 翻译文件能否装载
-  2. 控件层：Qt translate() 是否已中文化
-  3. 运行时层：整串 / 片段替换 / 拼接消息 / 控制指令透传
-  4. 真实界面：用生成的 Ui_mainWindow 构建窗口，断言控件文字
-  5. 原生对话框：文件对话框标题与过滤器、消息框标题
-  6. Qt 自带目录：QMessageBox 标准按钮已中文化（qtbase 取不到时只提示）
-  7. 守卫：设备名 / 格式名是程序逻辑键，绝不能被翻译
+本 fork 不再自己包运行时替换层，所以这里只验「上游机制 + 本 fork 的译法是否生效」。
+断言以语义为主（译文 ≠ 英文原文且含汉字），不锁具体用词，方便跟随上游更新。
+
+用法：
+  python .github/scripts/verify_zh.py
+      跑源码形态：从 translations/kcc_zh_CN.qm 装载
+  python .github/scripts/verify_zh.py --require-resource
+      rcc 之后：从资源 :/i18n/kcc_zh_CN.qm 装载（打包后真正走的路径）
+  python .github/scripts/verify_zh.py --require-resource --require-default-zh
+      打包前：额外断言默认语言是 zh_CN（构建时用 set_zh_default.py 钉住）
 
 任一条不成立即退出码非 0。
 """
 import ast
 import os
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 require_resource = "--require-resource" in sys.argv
+require_default_zh = "--require-default-zh" in sys.argv
 
-from PySide6.QtCore import QCoreApplication, QFile        # noqa: E402
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox  # noqa: E402
+TS_FILE = os.path.join(ROOT, "translations", "kcc_zh_CN.ts")
+QM_FILE = os.path.join(ROOT, "translations", "kcc_zh_CN.qm")
+QRC_FILE = os.path.join(ROOT, "gui", "KCC.qrc")
+RES_PATH = ":/i18n/kcc_zh_CN.qm"
 
-from kindlecomicconverter.i18n import install_translator, tr_runtime  # noqa: E402
+# 上游 12.1.5 的翻译表是 280 条；本 fork 再补 2 条。留出余量，低于此数说明 ts 被截断了
+MIN_TRANSLATIONS = 250
 
 fails = []
 
@@ -39,127 +46,126 @@ def has_han(s):
     return any("\u4e00" <= ch <= "\u9fff" for ch in s)
 
 
-def check(label, got, want):
-    ok = got == want
-    print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
+def check(label, ok, detail=""):
+    print(f"{'OK  ' if ok else 'FAIL'} {label}" + (f"\n      实际: {detail}" if detail else ""))
     if not ok:
-        fails.append(f"{label}: 期望 {want!r}, 实际 {got!r}")
+        fails.append(f"{label}: {detail}")
 
 
 def check_zh(label, got, src):
     """语义断言：已中文化 = 与原文不同且含汉字。"""
-    ok = got != src and has_han(got)
-    print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
-    if not ok:
-        fails.append(f"{label}: 未中文化（原文 {src!r} → 实际 {got!r}）")
+    check(label, got != src and has_han(got), repr(got))
 
 
-def check_passthrough(label, got, src):
-    """控制指令 / 纯数字必须原样透传。"""
-    ok = got == src
-    print(f"{'OK  ' if ok else 'FAIL'} {label}\n      实际: {got!r}")
-    if not ok:
-        fails.append(f"{label}: 应原样透传，实际 {got!r}")
-
+from PySide6.QtCore import QCoreApplication, QFile, QTranslator   # noqa: E402
+from PySide6.QtWidgets import QApplication, QMainWindow            # noqa: E402
 
 app = QApplication([sys.argv[0]])
 
-# --- 0) 打包形态检查 ---
-res_qtbase_size = 0
+# --- 1) 翻译表本身：齐不齐、有没有漏译 -------------------------------------
+total = 0
+unfinished = []
+if not os.path.exists(TS_FILE):
+    check("翻译表存在", False, TS_FILE)
+else:
+    root = ET.parse(TS_FILE).getroot()
+    for ctx in root.findall("context"):
+        ctx_name = ctx.findtext("name")
+        for msg in ctx.findall("message"):
+            total += 1
+            translation = msg.find("translation")
+            text = (translation.text or "") if translation is not None else ""
+            if translation is None or not text.strip() or translation.get("type") == "unfinished":
+                unfinished.append(f"{ctx_name}: {(msg.findtext('source') or '')[:50]}")
+    check(f"翻译表条数 ≥ {MIN_TRANSLATIONS}", total >= MIN_TRANSLATIONS, f"{total} 条")
+    check("翻译表无未翻译条目", not unfinished,
+          f"{len(unfinished)} 条: {unfinished[:5]}")
+
+# --- 2) 装载 ----------------------------------------------------------------
 if require_resource:
-    from kindlecomicconverter import KCC_rc  # noqa: F401
-    for res in (":/i18n/kcc_zh_CN.qm", ":/i18n/qtbase_zh_CN.qm"):
-        f = QFile(res)
-        ok, size = f.exists(), (f.size() if f.exists() else 0)
-        print(f"{'OK  ' if ok else 'FAIL'} 资源 {res} 存在\n      实际: {ok} ({size} bytes)")
-        if not ok:
-            fails.append(f"资源缺失: {res}")
-    res_qtbase_size = QFile(":/i18n/qtbase_zh_CN.qm").size()
+    from kindlecomicconverter import KCC_rc  # noqa: F401  仅为让资源系统注册进来
+    res = QFile(RES_PATH)
+    check(f"资源 {RES_PATH} 存在", res.exists() and res.size() > 1000,
+          f"exists={res.exists()} size={res.size() if res.exists() else 0}")
+    load_path = RES_PATH
+else:
+    check("编译产物 translations/kcc_zh_CN.qm 存在", os.path.exists(QM_FILE), QM_FILE)
+    load_path = QM_FILE
 
+translator = QTranslator()
+loaded = translator.load(load_path)
+check(f"QTranslator.load({load_path!r})", loaded, str(loaded))
+if loaded:
+    app.installTranslator(translator)
 
-def qtbase_available():
-    """qtbase 中文目录是否真的能拿到。
+# --- 3) 控件层（KCC_ui.py 生成时埋的 translate()）-------------------------
+for ctx, source in [
+    ("mainWindow", "Convert"),
+    ("mainWindow", "Preserve Margin %"),
+    ("mainWindow", "Cropping power:"),
+    ("editorDialog", "Cancel"),
+]:
+    check_zh(f"translate({ctx!r}, {source!r})",
+             QCoreApplication.translate(ctx, source), source)
 
-    资源系统（打包后）或文件系统（跑源码）任一处存在且非空即算有。
-    拿不到时不应把「标准按钮已中文化」当作硬性断言 —— 那会误判。
-    """
-    if res_qtbase_size > 0:
-        return True
-    p = os.path.join(ROOT, "i18n", "qtbase_zh_CN.qm")
-    return os.path.exists(p) and os.path.getsize(p) > 0
+# --- 4) 运行时消息（上游改成 QCoreApplication.translate / self.tr 的那些）---
+for source in [
+    "Creating EPUB files",
+    "Conversion interrupted.",
+    "Attempting file fusion",
+    "Kindle Comic Converter",
+]:
+    check_zh(f"translate('KCCGUI', {source!r})",
+             QCoreApplication.translate("KCCGUI", source), source)
 
-# --- 1) 装载 ---
-check("install_translator()", install_translator(app), True)
-
-# --- 2) 控件层 ---
-check_zh('translate("mainWindow", "Convert")',
-         QCoreApplication.translate("mainWindow", "Convert"), "Convert")
-check_zh('translate("mainWindow", "Preserve Margin %")',
-         QCoreApplication.translate("mainWindow", "Preserve Margin %"), "Preserve Margin %")
-check_zh('translate("editorDialog", "Cancel")',
-         QCoreApplication.translate("editorDialog", "Cancel"), "Cancel")
-
-# --- 3) 运行时层 ---
-check_zh("运行时整句", tr_runtime("Creating EPUB files"), "Creating EPUB files")
-check_zh("运行时片段替换", tr_runtime("[1/3] Processing images"), "[1/3] Processing images")
-check_zh("运行时拼接消息", tr_runtime("Created fusion at /tmp/x.cbz"),
-         "Created fusion at /tmp/x.cbz")
-check_passthrough("控制指令透传", tr_runtime("tick"), "tick")
-check_passthrough("数字透传", tr_runtime("42"), "42")
-
-# --- 5) 原生对话框 ---
-check_zh("文件对话框标题", tr_runtime("Select file"), "Select file")
-check_zh("文件对话框过滤器", tr_runtime("Comic (*.pdf);;All (*.*)"),
-         "Comic (*.pdf);;All (*.*)")
-check_zh("消息框标题", tr_runtime("KCC - Error"), "KCC - Error")
-
-# --- 4) 真实界面 ---
+# --- 5) 真实界面：拿生成的 Ui_mainWindow 建一次窗口，断言控件文字 ----------
 from kindlecomicconverter import KCC_ui  # noqa: E402
 
 window = QMainWindow()
 ui = KCC_ui.Ui_mainWindow()
 ui.setupUi(window)
 check_zh("convertButton.text()", ui.convertButton.text(), "Convert")
-check_zh("gammaLabel.text()", ui.gammaLabel.text(), "Gamma: Auto")
-check_zh("croppingPowerLabel.text()", ui.croppingPowerLabel.text(), "Cropping power:")
 check_zh("窗口标题", window.windowTitle(), "Kindle Comic Converter")
 
-# --- 6) Qt 自带目录：消息框标准按钮 ---
-box = QMessageBox()
-box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-labels = sorted(b.text() for b in box.buttons())
-if qtbase_available():
-    ok = all(has_han(x) for x in labels)
-    print(f"{'OK  ' if ok else 'FAIL'} QMessageBox 标准按钮\n      实际: {labels}")
-    if not ok:
-        fails.append(f"QMessageBox 标准按钮未中文化: {labels}")
-else:
-    print(f"SKIP QMessageBox 标准按钮（qtbase 中文目录不可得，已优雅降级）\n      实际: {labels}")
+# --- 6) 资源清单：.qm 必须由 gui/KCC.qrc 打进 :/i18n/ ----------------------
+qrc = open(QRC_FILE, encoding="utf-8").read() if os.path.exists(QRC_FILE) else ""
+check("gui/KCC.qrc 绑定 translations/kcc_zh_CN.qm",
+      'alias="kcc_zh_CN.qm"' in qrc and "../translations/kcc_zh_CN.qm" in qrc,
+      "未在 qrc 中找到 i18n 资源条目")
 
-# --- 7) 守卫：逻辑键不得被翻译 ---
-ts = os.path.join(ROOT, "i18n", "kcc_zh_CN.ts")
-if os.path.exists(ts):
-    tree = ast.parse(open(os.path.join(ROOT, "kindlecomicconverter", "KCC_gui.py"),
-                          encoding="utf-8").read())
-    logic = set()
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Dict):
-            for t in n.targets:
-                if isinstance(t, ast.Attribute) and t.attr in ("profiles", "formats"):
-                    for k in n.value.keys:
-                        if isinstance(k, ast.Constant) and isinstance(k.value, str):
-                            logic.add(k.value)
-    src = open(ts, encoding="utf-8").read()
-    leaked = [k for k in logic if f"<source>{k}</source>" in src]
-    print(f"{'OK  ' if not leaked else 'FAIL'} 逻辑键守卫（{len(logic)} 个设备/格式名）\n"
-          f"      被误译: {leaked}")
-    if leaked:
-        fails.append(f"逻辑键被翻译，会导致功能失效: {leaked}")
+# --- 7) 默认语言（构建时钉成中文）------------------------------------------
+if require_default_zh:
+    from kindlecomicconverter import i18n as kcc_i18n
+    check("i18n.DEFAULT_LANGUAGE == 'zh_CN'",
+          kcc_i18n.DEFAULT_LANGUAGE == "zh_CN", repr(kcc_i18n.DEFAULT_LANGUAGE))
+    check("apply_language('zh_CN') 生效",
+          kcc_i18n.apply_language("zh_CN") == "zh_CN", "apply_language 返回非 zh_CN")
+
+# --- 8) 守卫：设备名 / 格式名是程序逻辑键，绝不能被翻译 --------------------
+logic = set()
+gui_src = os.path.join(ROOT, "kindlecomicconverter", "KCC_gui.py")
+if os.path.exists(gui_src):
+    tree = ast.parse(open(gui_src, encoding="utf-8").read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            for target in node.targets:
+                if isinstance(target, ast.Attribute) and target.attr in ("profiles", "formats"):
+                    for key in node.value.keys:
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                            logic.add(key.value)
+if logic and os.path.exists(TS_FILE):
+    ts_sources = set()
+    for ctx in ET.parse(TS_FILE).getroot().findall("context"):
+        for msg in ctx.findall("message"):
+            ts_sources.add((msg.findtext("source") or "").strip())
+    leaked = sorted(k for k in logic if k in ts_sources)
+    check(f"逻辑键守卫（{len(logic)} 个设备/格式名）", not leaked,
+          f"被误译: {leaked}")
 
 if fails:
     print("\n==== 中文化验证未通过 ====")
-    for f in fails:
-        print(" -", f)
+    for item in fails:
+        print(" -", item)
     sys.exit(1)
 
 print("\n==== 中文化验证全部通过 ====")

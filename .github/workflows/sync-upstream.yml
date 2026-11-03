@@ -69,7 +69,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: 配置 git 身份
         run: |
@@ -94,8 +93,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::上游有新提交，开始合并"
-            # 冲突按白名单自动消解（README.md 跟上游、gui/KCC.qrc 两边合并、
-            # .github/workflows 跟上游）；白名单外的冲突会直接失败，不带坏结果往下走。
+            # 冲突按白名单自动消解（README.md、gui/KCC.qrc、KCC_gui.py、i18n.py
+            # 跟上游，translations/kcc_zh_CN.ts 保留本 fork 译法，.github/workflows 跟上游）；
+            # 白名单外的冲突会直接失败，不带坏结果往下走。
             bash .github/scripts/merge_upstream.sh upstream/master
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -117,11 +117,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir -r requirements.txt certifi
 
-      - name: 编译翻译文件并准备 qtbase 中文目录
+      - name: 编译翻译文件 (.ts -> .qm)
         if: steps.check.outputs.changed == 'true' || inputs.force == true
         run: |
-          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
-          bash .github/scripts/fetch_qtbase.sh
+          pyside6-lrelease translations/kcc_zh_CN.ts -qm translations/kcc_zh_CN.qm
+          ls -l translations/*.qm
 
       - name: 中文化自检 —— 不过就不推送
         if: steps.check.outputs.changed == 'true' || inputs.force == true

@@ -2,6 +2,9 @@ name: 构建中文版 KCC
 
 # 在 GitHub 云端产出中文版 KCC 可执行文件，本机不装 Python / PySide6 / PyInstaller。
 # 用法：Actions → 构建中文版 KCC → Run workflow
+#
+# 翻译走上游原生 i18n：translations/kcc_zh_CN.ts → lrelease → .qm → rcc 进资源系统，
+# 打包前由 set_zh_default.py 把内置默认语言钉成 zh_CN。
 
 on:
   workflow_dispatch:
@@ -16,21 +19,20 @@ on:
           - "windows"
           - "linux"
       release_tag:
-        description: "填了就建 Release 并挂上可执行文件（例如 v11.3.2-zh）；留空只出 Artifacts"
+        description: "填了就建 Release 并挂上可执行文件（例如 v12.1.5-zh）；留空只出 Artifacts"
         required: false
         default: ""
   push:
     branches: [master]
     paths:
-      - "i18n/**"
-      - "kindlecomicconverter/i18n.py"
-      - ".github/workflows/build-zh.yml"
-      - ".github/scripts/verify_zh.py"
+      - "translations/**"
+      - ".github/zh_overrides.json"
 
 permissions:
   contents: write
 
 # 依赖直接读仓库自带的 requirements.txt（上游自己的清单），不另维护一份
+# 注意：setup-python 不开 cache: pip —— 缓存目录不存在时该 step 会直接失败（实测踩过）
 
 jobs:
   # ------------------------------------------------------------------
@@ -44,7 +46,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: 安装 Qt 运行库
         run: |
@@ -59,14 +60,10 @@ jobs:
 
       - name: 编译翻译文件 (.ts -> .qm)
         run: |
-          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
-          ls -l i18n/
+          pyside6-lrelease translations/kcc_zh_CN.ts -qm translations/kcc_zh_CN.qm
+          ls -l translations/*.qm
 
-      - name: 准备 Qt 自带翻译（qtbase 中文目录）
-        shell: bash
-        run: bash .github/scripts/fetch_qtbase.sh
-
-      - name: 自检 A —— 文件系统回退路径
+      - name: 自检 A —— 文件系统路径
         run: python .github/scripts/verify_zh.py
 
       - name: 重建 Qt 资源 (.qrc -> KCC_rc.py)，把 .qm 打进资源系统
@@ -84,8 +81,8 @@ jobs:
         with:
           name: zh-translations
           path: |
-            i18n/kcc_zh_CN.ts
-            i18n/kcc_zh_CN.qm
+            translations/kcc_zh_CN.ts
+            translations/kcc_zh_CN.qm
           if-no-files-found: error
 
   # ------------------------------------------------------------------
@@ -101,7 +98,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: 安装依赖
         shell: pwsh
@@ -109,17 +105,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir -r requirements.txt certifi pyinstaller
 
-      - name: 编译翻译文件并准备 qtbase 中文目录
+      - name: 钉默认中文 + 编译翻译 + 重建资源
         shell: bash
         run: |
-          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
-          bash .github/scripts/fetch_qtbase.sh
-
-      - name: 重建 Qt 资源 (.qrc -> KCC_rc.py)
-        shell: pwsh
-        run: |
-          Get-ChildItem i18n | Format-Table Name, Length
+          python .github/scripts/set_zh_default.py
+          pyside6-lrelease translations/kcc_zh_CN.ts -qm translations/kcc_zh_CN.qm
           pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
+
+      - name: 自检 —— 中文界面 + 默认语言
+        shell: bash
+        run: python .github/scripts/verify_zh.py --require-resource --require-default-zh
 
       - name: 打包 exe
         shell: pwsh
@@ -152,7 +147,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: 安装依赖
         run: |
@@ -162,11 +156,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --no-cache-dir -r requirements.txt certifi pyinstaller
 
-      - name: 编译翻译文件并重建资源
+      - name: 钉默认中文 + 编译翻译 + 重建资源
         run: |
-          pyside6-lrelease i18n/kcc_zh_CN.ts -qm i18n/kcc_zh_CN.qm
-          bash .github/scripts/fetch_qtbase.sh
+          python .github/scripts/set_zh_default.py
+          pyside6-lrelease translations/kcc_zh_CN.ts -qm translations/kcc_zh_CN.qm
           pyside6-rcc gui/KCC.qrc -o kindlecomicconverter/KCC_rc.py
+
+      - name: 自检 —— 中文界面 + 默认语言
+        run: python .github/scripts/verify_zh.py --require-resource --require-default-zh
 
       - name: 打包可执行程序
         run: |
@@ -177,11 +174,6 @@ jobs:
           pyinstaller --hidden-import=_cffi_backend --hidden-import=queue -y -F \
             -i icons/comic2ebook.ico -n "kcc-c2e_zh_linux_$V" kcc-c2e.py
           ls -lh dist/
-
-      - name: 冒烟测试 —— 确认翻译已进资源系统
-        run: |
-          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-          python .github/scripts/verify_zh.py --require-resource
 
       - name: 冒烟测试 —— 真跑打包后的程序，确认冻结包内依赖与翻译资源完整
         continue-on-error: true
@@ -235,7 +227,7 @@ jobs:
           ls -lh upload/
 
           cat > notes.md <<'NOTES'
-          KCC（Kindle Comic Converter）**简体中文版**，在上游基础上做了界面中文化。
+          KCC（Kindle Comic Converter）**简体中文版**：跟随上游最新版，界面原生中文，开箱即中文。
 
           ## 下载哪个
 
@@ -250,12 +242,14 @@ jobs:
 
           - **Windows 版未签名**，首次运行会弹 SmartScreen 警告，点「更多信息」→「仍要运行」。
           - **Linux 版**需要系统有 Qt 运行库：`libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3`。
-          - 命令行程序（kcc-c2e）的输出提示仍为英文，本次只做了图形界面中文化。
+          - 默认语言是简体中文，界面右上角「文 A」菜单可切回英文/日文/韩文/西班牙文。
+          - 命令行程序（kcc-c2e）的输出提示仍为英文，汉化只覆盖图形界面。
 
-          ## 中文化范围
+          ## 中文化
 
-          - 控件层 128 条：按钮 / 标签 / 菜单 / 提示
-          - 运行时消息 60 条：任务列表 / 对话框 / 托盘通知 / 进度条
+          - 机制：上游原生 Qt 翻译（`translations/kcc_zh_CN.ts` → `.qm` → qrc 资源）
+          - 覆盖：282 条，含控件层与运行时消息（任务列表 / 对话框 / 托盘通知 / 进度条）
+          - 本 fork 只维护中文措辞（`translations/zh_overrides.json`），代码层与上游保持一致
 
           机制与改翻译的方法见仓库 `.github/KCC-ZH.md`。
           NOTES

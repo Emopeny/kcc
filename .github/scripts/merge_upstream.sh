@@ -3,9 +3,12 @@
 #
 # 这里堵的是两层坑：
 #
-# 1) 本 fork 自己动过的文件（README.md、gui/KCC.qrc）和上游撞到同几行是常态，
-#    裸 `git merge` 必然冲突 → 每天定时的「跟随上游自动中文化」整条卡死，
-#    上游的更新永远合不进来。所以按白名单自动消解。
+# 1) 上游与本 fork 会改到同一批文件：README.md、gui/KCC.qrc，以及
+#    上游从 12.1.x 起自己做的多语言改造（kindlecomicconverter/KCC_gui.py、
+#    kindlecomicconverter/i18n.py、translations/*.ts）。裸 `git merge` 必然冲突，
+#    每天定时的「跟随上游自动中文化」就会卡死，上游的更新永远合不进来。
+#    所以按白名单自动消解：源码一律跟上游（本 fork 不再自己包 i18n 层），
+#    只有「中文措辞」这一层是本 fork 的东西，合完再盖回去。
 #
 # 2) GITHUB_TOKEN 是 GitHub App 令牌，没有 workflows 权限：
 #    只要合并结果动了 .github/workflows/**，push 一律被拒
@@ -66,33 +69,19 @@ for f in "${conflicts[@]:-}"; do
       resolved+=("- \`$f\` —— $side")
       ;;
 
-    gui/KCC.qrc)
-      # 资源清单是「两边都要」：上游新增的图标 + 本 fork 的 i18n 资源块
+    gui/KCC.qrc|kindlecomicconverter/KCC_gui.py|kindlecomicconverter/i18n.py)
+      # 上游自己就是这套 i18n 机制的发源方：源码一律跟上游，本 fork 不再打补丁
       git checkout --theirs -- "$f"
-      if grep -q 'prefix="i18n"' "$f"; then
-        side="跟随上游版（i18n 资源块已在其中）"
-      else
-        python - "$f" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-block = (
-    '  <qresource prefix="i18n">\n'
-    '    <file alias="kcc_zh_CN.qm">../i18n/kcc_zh_CN.qm</file>\n'
-    '    <file alias="qtbase_zh_CN.qm">../i18n/qtbase_zh_CN.qm</file>\n'
-    '  </qresource>\n'
-)
-if "</RCC>" not in text:
-    sys.exit("KCC.qrc 结构不符合预期：找不到 </RCC>")
-path.write_text(text.replace("</RCC>", block + "</RCC>", 1), encoding="utf-8")
-print("i18n 资源块已补回 gui/KCC.qrc")
-PY
-        side="上游版 + 补回 i18n 资源块"
-      fi
       git add -- "$f"
-      resolved+=("- \`$f\` —— $side")
+      resolved+=("- \`$f\` —— 跟随上游版（源码层不再由 fork 改造）")
+      ;;
+
+    translations/kcc_zh_CN.ts)
+      # 中文翻译表：上游版为底（保住上游新加的串），再盖上本 fork 定过的措辞
+      git checkout --theirs -- "$f"
+      python3 .github/scripts/apply_zh_overrides.py
+      git add -- "$f"
+      resolved+=("- \`$f\` —— 上游版 + 本 fork 译法（zh_overrides.json）")
       ;;
 
     *)
@@ -116,6 +105,14 @@ if [ ${#unhandled[@]} -gt 0 ]; then
   git merge --abort
   echo "::error::以下冲突不在白名单内，需要人工处理：${unhandled[*]}"
   exit 1
+fi
+
+# --- 中文翻译表：无条件把本 fork 的措辞盖到上游版之上 -----------------------
+# 上游新增翻译表时是「干净新增」，不会进上面的冲突循环，所以这里不能只在冲突分支里处理。
+if [ -f translations/kcc_zh_CN.ts ] && [ -f .github/zh_overrides.json ]; then
+  python3 .github/scripts/apply_zh_overrides.py
+  git add -- translations/kcc_zh_CN.ts
+  note "- \`translations/kcc_zh_CN.ts\` —— 上游版 + 本 fork 译法（.github/zh_overrides.json）"
 fi
 
 # --- 工作流文件：默认保 fork 版，否则 push 会被 GitHub App 权限规则拒绝 ---

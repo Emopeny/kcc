@@ -1,158 +1,125 @@
-# KCC 中文版
-
-本仓库是 [ciromattia/kcc](https://github.com/ciromattia/kcc) 的 fork，在其基础上做了**简体中文界面**，
-并用 GitHub Actions 在云端产出可执行文件 —— 本机不需要装 Python / PySide6 / PyInstaller。
-
-界面翻译参考并吸收了 [pretenderlu/kcc-chinese](https://github.com/pretenderlu/kcc-chinese)
-（同样基于 KCC v11.3.2）的译文，并在此基础上补齐了它未覆盖的部分。特此致谢。
-
-## 拿可执行文件
-
-`Actions` → `构建中文版 KCC` → 选 `Run workflow`（或直接下载已有 run 的 Artifacts）：
-
-| Artifact | 内容 |
-|---|---|
-| `kcc-zh-windows` | `KCC_zh_win64_<版本>.exe`（图形界面）+ `kcc-c2e_zh_win64_<版本>.exe`（命令行） |
-| `kcc-zh-linux` | `kcc_zh_linux_<版本>`（图形界面）+ `kcc-c2e_zh_linux_<版本>`（命令行） |
-| `zh-translations` | 翻译源文件 `kcc_zh_CN.ts` 与编译产物 `kcc_zh_CN.qm` |
-
-产物默认保留 90 天。需要长期链接就建一个 Release 挂上去。
-
-## 注意
-
-- **Windows exe 未签名**。上游走 SignPath 签名，fork 上没有密钥，所以首次运行会弹 SmartScreen 警告，
-  需要「更多信息」→「仍要运行」。
-- **Linux 单文件程序**需要系统有 Qt 运行库：`libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3`。
-- **macOS 未构建**：上游 macOS 流程依赖 Apple 签名证书与描述文件，fork 上无法使用。
-- **命令行程序（kcc-c2e）的输出提示仍是英文**，本次只做了图形界面中文化。
-
-## 中文化是怎么做的
-
-分两层，只加翻译钩子，不改逻辑与布局。
-
-### 1. 控件层（138 条：按钮 / 标签 / 菜单 / 提示）
-
-上游 `kindlecomicconverter/KCC_ui.py` 与 `KCC_ui_editor.py` 是 Qt Designer 生成的，
-本来就已经把文字包在 `QCoreApplication.translate("mainWindow"/"editorDialog", ...)` 里了，
-所以这一层**不需要改任何源码**，只要提供翻译文件：
-
-- `i18n/kcc_zh_CN.ts` —— 翻译源文件，138 条，0 缺译
-- 构建时 `pyside6-lrelease` 编译成 `kcc_zh_CN.qm`
-- `gui/KCC.qrc` 里加了资源条目，构建时 `pyside6-rcc` 把它编进 `KCC_rc.py`，
-  于是 .qm 随 Qt 资源系统一起进 exe
-- 运行时从 `:/i18n/kcc_zh_CN.qm` 装载（直接跑源码时回退到文件系统路径）
-
-抽取用 AST 而非正则：跨行隐式拼接的字符串会被 Python 合并成一个字面量，
-而 `translate()` 收到的正是合并后的整串，必须按整串建键。
-
-### 2. 运行时消息（262 条：任务列表 / 对话框 / 托盘通知 / 进度条 / 原生对话框）
-
-这些是硬编码在源码里的，没有走 Qt 翻译机制。处理方式是**在消息 funnel 处统一查表**：
-
-- 新增 `kindlecomicconverter/i18n.py`：提供 `install_translator()` 与 `tr_runtime()`
-- `KCC_gui.py` 的 4 个 funnel 加钩子：
-  `addMessage` / `showDialog` / `addTrayMessage` / `updateProgressbar`
-- 查表规则：先整串精确匹配，未命中再按**长串优先**做片段替换。
-  这样引擎侧 `f'{job_progress}Processing images'` 这类「前缀 + 句子」的拼接也能翻译，
-  所以 `comic2ebook.py` 一行都不用改。
-- 不走 funnel 的地方另有 11 处 `tr_runtime(...)` 包裹：
-  按钮与状态栏、窗口标题、`QFileDialog` 的标题与过滤器、`QMessageBox` 的标题。
-  卷号校验等元数据编辑器消息统一在 `statusLabel` 展示处包一处即全覆盖。
-
-### 3. Qt 自带目录（标准按钮）
-
-`QMessageBox` 的 OK / Yes / No 等按钮文字来自 Qt 自己的翻译目录，不在 KCC 源码里。
-`.github/scripts/fetch_qtbase.sh` 依次尝试取得 `qtbase_zh_CN.qm`：
-
-1. PySide6 自带目录（实测多数版本**不带**这个文件）
-2. 官方 [qt/qttranslations](https://github.com/qt/qttranslations) 仓库下载 `.ts`，用 `pyside6-lrelease` 编译
-3. 都拿不到则生成空占位文件 —— rcc 不会中断，运行时 `QTranslator.load` 返回 False
-   优雅降级为英文，不会崩
-
-### 4. 接线
-
-`startup.py` 在构建主窗口**之前**装载翻译器 —— 必须在此之前，
-因为 `setupUi()` 里的 `translate()` 是在窗口构造时执行的。
-
-### 5. 设备名与格式名必须保留英文
-
-设备下拉框与格式下拉框的**显示文字本身就是程序逻辑键**：
-
-```python
-options.profile = GUI.profiles[str(GUI.deviceBox.currentText())]['Label']
-current_format = GUI.formats[str(GUI.formatBox.currentText())]['format']
-```
-
-所以 `Kindle Scribe 3`、`Kobo Nia`、`MOBI/AZW3`、`KFX (Send to Kindle EPUB)` 这类
-共 55 个字符串**绝不能被翻译**，否则功能直接失效。
-工具链用 AST 从 `KCC_gui.py` 的 `self.profiles` / `self.formats` 字典精确提取这些键，
-加入黑名单；自检里还有一道守卫，一旦发现它们出现在 `.ts` 里就判定构建失败。
-
-### 6. 跨层一致性
-
-同一句文本可能在控件层与运行时层各有一份译文（例如标签初值与动态更新），
-会出现同一个标签显示两种文字。合并时按归一化文本（忽略大小写、空白、冒号）对齐，
-统一采用控件层译文；窗口标题这类需要保留尾空格的再单独定稿。
-
-## 自检
-
-`.github/scripts/verify_zh.py` 做七层校验，任一不过则构建失败：
-
-1. 翻译文件能否装载
-2. 控件层：`translate()` 是否已中文化
-3. 运行时层：整串 / 片段替换 / 拼接消息是否正确，且控制指令（`tick`、数字）必须原样透传
-4. 用真实生成的 `Ui_mainWindow` 构建窗口，断言控件文字确实是中文
-5. 原生对话框：`QFileDialog` 标题与过滤器、`QMessageBox` 标题
-6. `QMessageBox` 标准按钮（qtbase 取不到时只提示不判失败）
-7. **守卫**：55 个设备名 / 格式名是程序逻辑键，一旦出现在 `.ts` 里即判定失败
-
-断言方式以**语义**为主：「已中文化」= 译文与英文原文不同且含汉字。
-不硬编码具体用词，这样调整译文不会导致自检误报，适配跟随上游自动重建。
-
-构建流程分两段跑：`lrelease` 之后跑一次（验证文件系统回退路径），
-`rcc` 之后再跑一次并加 `--require-resource`（验证打包后真正走的资源路径）。
-
-另有一道冒烟测试：offscreen 模式真跑打包出来的 Linux 程序，
-退出码为 124（被 timeout 终止）即说明冻结包内依赖与资源完整。
-
-## 改翻译
-
-1. 编辑 `i18n/kcc_zh_CN.ts`（控件层）
-2. 编辑 `kindlecomicconverter/i18n.py` 里的 `RUNTIME_ZH`（运行时层）
-3. 推到 master，`build-zh.yml` 会自动重新构建
-
-## 与上游同步
-
-中文化改动刻意保持最小，便于跟随上游更新：
-
-- 新增 7 个文件：`i18n/kcc_zh_CN.ts`、`kindlecomicconverter/i18n.py`、
-  两个工作流（构建 / 跟随上游）、两个自检脚本、qtbase 获取脚本
-- 改动 3 个文件：
-  `gui/KCC.qrc`（+4 行资源）、`startup.py`（+3 行）、
-  `KCC_gui.py`（+37 处 `tr_runtime` 调用，均为插入钩子，不动原逻辑）
-
-## 跟随上游自动中文化
-
-`.github/workflows/sync-upstream.yml` —— 上游更新后自动重新中文化编译，全在 GitHub 云端跑。
-
-- **触发**：每天 UTC 19:00（北京时间 03:00）定时检查；也可手动 `Run workflow`
-- **判断上游是否有更新**：用 git 祖先关系，不需要额外存状态文件
-  （`upstream/master` 是 `HEAD` 的祖先 → 已合过；否则就是有新提交）
-- **流程**：
-  1. 检出 fork，拉取上游 `ciromattia/kcc`
-  2. 有新提交则 `git merge upstream/master` —— 冲突会直接失败，不会带着坏结果往下走
-  3. 装依赖、`lrelease` 编译翻译、跑 `verify_zh.py` 中文化自检
-  4. **自检通过才推送**；然后触发 `build-zh.yml` 重建并发布 Release
-  5. 无更新则跳过，不空跑构建
-
-- **Release tag 规则**：`v<上游版本号>-zh`。上游升版本号 → 出新 Release；
-  版本号未变但只有零散提交 → 刷新同一个 Release（`upload --clobber`）。
-- **手动强制重建**：手动触发时把 `force` 打开，即使上游无更新也会重建并刷新 Release。
-
-### 注意
-
-- 上游若改动了被中文化补丁锚定的代码行（`KCC_gui.py` 的 4 个 funnel 与 11 处 site 钩子、
-  `startup.py`、`gui/KCC.qrc`），`git merge` 会冲突并让工作流失败 —— 这是**故意**的，
-  宁可停下来让人处理，也不要静默产出半中文化的版本。
-- GitHub 对 fork 的定时工作流有默认限制。若次日 03:00 没有自动跑，
-  到仓库 `Actions` 页把 `跟随上游自动中文化` 启用一次即可。
+1|# KCC 中文版
+2|
+3|本仓库是 [ciromattia/kcc](https://github.com/ciromattia/kcc) 的 fork，产出**开箱即简体中文**的
+4|Windows / Linux 可执行文件，全部在 GitHub Actions 云端构建 —— 本机不需要装 Python / PySide6 / PyInstaller。
+5|
+6|界面译文参考并吸收了 [pretenderlu/kcc-chinese](https://github.com/pretenderlu/kcc-chinese)
+7|（基于 KCC v11.3.2）的措辞，特此致谢。
+8|
+9|## 拿可执行文件
+10|
+11|`Actions` → `构建中文版 KCC` → `Run workflow`（或直接下载已有 run 的 Artifacts）：
+12|
+13|| Artifact | 内容 |
+14||---|---|
+15|| `kcc-zh-windows` | `KCC_zh_win64_<版本>.exe`（图形界面）+ `kcc-c2e_zh_win64_<版本>.exe`（命令行） |
+16|| `kcc-zh-linux` | `kcc_zh_linux_<版本>`（图形界面）+ `kcc-c2e_zh_linux_<版本>`（命令行） |
+17|| `zh-translations` | 翻译表 `translations/kcc_zh_CN.ts` 与编译产物 `kcc_zh_CN.qm` |
+18|
+19|长期版本走 Release，tag 形如 `v12.1.5-zh`。
+20|
+21|## 注意
+22|
+23|- **Windows exe 未签名**。上游走 SignPath 签名，fork 上没有密钥，首次运行会弹 SmartScreen 警告，
+24|  需要「更多信息」→「仍要运行」。
+25|- **Linux 单文件程序**需要系统有 Qt 运行库：`libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3`。
+26|- **macOS 未构建**：上游 macOS 流程依赖 Apple 签名证书与描述文件，fork 上无法使用。
+27|- **命令行程序（kcc-c2e）的输出提示仍是英文**，汉化只覆盖图形界面。
+28|
+29|## 中文化是怎么做的
+30|
+31|**跟上上游，不另起炉灶。** 上游从 12.1.x 起自带多语言：源码里所有界面文案都走 Qt 的
+32|`translate()` / `self.tr()`，翻译表在 `translations/*.ts`，构建时 `pyside6-lrelease`
+33|编译成 `.qm`，再由 `pyside6-rcc` 编进 Qt 资源系统，运行时从 `:/i18n/kcc_zh_CN.qm` 装载。
+34|界面右上角「文 A」菜单可切换语言，选择记在 `QSettings` 里。
+35|
+36|本 fork 因此**不再改任何源码**，只在三处动手：
+37|
+38|1. **`.github/zh_overrides.json` —— 中文措辞**
+39|   `{context: {英文原文: 中文}}`，共 82 条：80 条是本 fork 与上游译法不同的措辞，
+40|   2 条是上游 `.ts` 漏收（lupdate 落后于源码）而运行时只会在界面上出现英文的串。
+41|2. **`.github/scripts/apply_zh_overrides.py` —— 把措辞盖上上游 `.ts`**
+42|   以上游 `.ts` 为底（保住上游新增的串），同一 `(context, source)` 用本 fork 译法覆盖；
+43|   上游漏收的串直接补进去。合并上游后由 `merge_upstream.sh` 调用，幂等。
+44|3. **`.github/scripts/set_zh_default.py` —— 默认语言钉成中文**
+45|   构建期把 `kindlecomicconverter/i18n.py` 的 `DEFAULT_LANGUAGE` 改成 `zh_CN`。
+46|   只在 CI 工作树里改、不提交，所以合并上游永远不会为这几行冲突。
+47|
+48|### 为什么不再自己包一层运行时翻译
+49|
+50|老做法是在 `KCC_gui.py` 的消息 funnel 处包 `tr_runtime()`，配一份 349 行运行时替换表。
+51|上游 12.1.x（commit `a053b3e`）自己做了同样的活，而且覆盖更全（280 条，含任务列表、
+52|对话框、托盘通知、进度条），于是两套机制正面相撞、每天合并都冲突。现在只在「怎么翻」
+53|这一层有 fork 的东西，代码层完全跟上游。
+54|
+55|### 设备名与格式名必须保留英文
+56|
+57|设备下拉框与格式下拉框的**显示文字本身就是程序逻辑键**：
+58|
+59|```python
+60|options.profile = GUI.profiles[str(GUI.deviceBox.currentText())]['Label']
+61|current_format = GUI.formats[str(GUI.formatBox.currentText())]['format']
+62|```
+63|
+64|`Kindle Scribe 3`、`Kobo Nia`、`MOBI/AZW3`、`KFX (Send to Kindle EPUB)` 这类共 55 个字符串
+65|**绝不能被翻译**，否则功能直接失效。自检里有一道守卫：AST 从 `KCC_gui.py` 的
+66|`self.profiles` / `self.formats` 字典精确提取这些键，一旦出现在 `.ts` 里即判定失败。
+67|
+68|## 自检
+69|
+70|`.github/scripts/verify_zh.py` 八层校验，任一不过则构建失败：
+71|
+72|1. 翻译表存在、条数 ≥ 250、无未翻译条目
+73|2. `.qm` 能否装载（资源形态 / 文件系统形态各跑一次）
+74|3. 控件层：`translate()` 的采样串确实变成了中文
+75|4. 运行时消息：`translate('KCCGUI', ...)` 的采样串确实变成了中文
+76|5. 用真实生成的 `Ui_mainWindow` 建窗口，断言按钮文字与窗口标题是中文
+77|6. `gui/KCC.qrc` 确实把 `translations/kcc_zh_CN.qm` 绑到了 `:/i18n/`
+78|7. 打包前额外断言 `DEFAULT_LANGUAGE == 'zh_CN'`（`--require-default-zh`）
+79|8. **守卫**：55 个设备名 / 格式名不得出现在 `.ts` 里
+80|
+81|断言以**语义**为主：「已中文化」= 译文与英文原文不同且含汉字，不锁具体用词，
+82|这样调译文不会误报，适配跟随上游自动重建。
+83|
+84|构建流程分两段跑：`lrelease` 之后跑一次（验文件系统路径），`rcc` 之后再跑一次并加
+85|`--require-resource`（验打包后真正走的资源路径）。另有一道冒烟测试：offscreen 真跑
+86|打包出的 Linux 程序，退出码 124（被 timeout 终止）即说明冻结包内依赖与资源完整。
+87|
+88|## 改翻译
+89|
+90|1. 编辑 `.github/zh_overrides.json`（只写要覆盖的条目，键为英文原文）
+91|2. 推到 master，`build-zh.yml` 会自动重新构建
+92|3. 想验证：本地跑 `python3 .github/scripts/apply_zh_overrides.py` 看命中情况
+93|
+94|上游新增的串会自动进 `.ts`（英文兜底），需要中文时在 `.github/zh_overrides.json` 里补一条即可。
+95|
+96|## 跟随上游自动中文化
+97|
+98|`.github/workflows/sync-upstream.yml` —— 上游更新后自动合并、编译、出包，全在 GitHub 云端跑。
+99|
+100|- **触发**：每天 UTC 19:00（北京时间 03:00）定时检查；也可手动 `Run workflow`
+101|- **判断上游是否有更新**：用 git 祖先关系，不需要额外存状态文件
+102|- **流程**：检出 fork → 拉上游 → `merge_upstream.sh` 按白名单消解冲突 → 编译翻译 →
+103|  `verify_zh.py` 自检 → 通过才推送 → 触发 `build-zh.yml` 出包并发 Release
+104|- **Release tag 规则**：`v<上游版本号>-zh`；版本号未变时刷新同一个 Release（`--clobber`）
+105|- **手动强制重建**：手动触发时打开 `force`，即使上游无更新也会重建
+106|- **补历史漏跟的工作流**：`sync_workflows=true` 会把上游存在的 `.github/workflows/**`
+107|  强制拉成上游版本（fork 自己的三个工作流上游没有，不受影响）
+108|
+109|### 合并白名单
+110|
+111|`merge_upstream.sh` 只自动消解这些文件的冲突，其余一律 `merge --abort` 硬失败：
+112|
+113|| 文件 | 归属 |
+114||---|---|
+115|| `README.md` | 上游（`README_POLICY=ours` 可反转） |
+116|| `.github/workflows/**` | 上游（需带 workflow 权限的推送令牌） |
+117|| `gui/KCC.qrc`、`KCC_gui.py`、`kindlecomicconverter/i18n.py` | 上游（源码层不再由 fork 改造） |
+118|| `translations/kcc_zh_CN.ts` | 上游为底 + 重新盖 `.github/zh_overrides.json` |
+119|
+120|### 注意
+121|
+122|- GitHub 对 fork 的定时工作流有默认限制。若次日 03:00 没跑，到 `Actions` 页把
+123|  「跟随上游自动中文化」/「构建中文版 KCC」启用一次即可。
+124|- 上游若改了 `i18n.py` 的结构（例如 `DEFAULT_LANGUAGE` 改名），`set_zh_default.py`
+125|  会直接报错失败 —— 这是故意的，宁可停下来，也不要静默出一个默认英文的「中文版」。
