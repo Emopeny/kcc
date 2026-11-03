@@ -30,25 +30,29 @@ jobs:
         include:
           - entry: kcc
             command: build_binary
+            requirements: requirements.txt
           - entry: kcc-c2e
             command: build_c2e
+            requirements: requirements.txt
           - entry: kcc-c2p
             command: build_c2p
+            requirements: requirements.txt
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: 3.11
+          # new enough to not worry about emudhra
+          python-version: 3.13.17
           cache: 'pip'
       - name: Install dependencies
         env:
           PYINSTALLER_COMPILE_BOOTLOADER: 1
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install certifi pyinstaller --no-binary pyinstaller
+          python -m pip install --upgrade pip certifi
+          pip install -r ${{ matrix.requirements }}
+          pip install pyinstaller --no-binary pyinstaller
       - name: build binary
         run: |
           python setup.py ${{ matrix.command }}

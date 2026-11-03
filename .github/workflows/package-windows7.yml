@@ -26,8 +26,13 @@ jobs:
     runs-on: windows-2022
     env:
       WINDOWS_7: 1
+      # If the workflow fails just check the workDir step below
+      PIP_CERT: D:\a\kcc\kcc\packaging\windows7\cacert.pem
     steps:
       - uses: actions/checkout@v7
+      - name: Get Current Working Directory
+        run: |
+          Get-Location
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -37,9 +42,9 @@ jobs:
         env:
           PYINSTALLER_COMPILE_BOOTLOADER: 1
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip certifi
           pip install -r requirements-win7.txt
-          pip install certifi pyinstaller --no-binary pyinstaller
+          pip install pyinstaller --no-binary pyinstaller
           .\gen_ui_files.bat
       - name: build binary
         run: |
@@ -68,4 +73,5 @@ jobs:
           prerelease: true
           generate_release_notes: false
           files: |
+            LICENSE.txt
             dist/*.exe

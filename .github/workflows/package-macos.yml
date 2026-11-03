@@ -25,7 +25,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ macos-15-intel, macos-14 ]
+        os: [ macos-15-intel, macos-15 ]
     runs-on: ${{ matrix.os }}
     env:
       MACOSX_DEPLOYMENT_TARGET: '14.0'
@@ -34,11 +34,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: 3.11
+          python-version: 3.14
+          check-latest: true
           cache: 'pip'
       - name: Install python dependencies
         run: |
-          python -m pip install --upgrade pip pyinstaller certifi
+          python -m pip install --upgrade pip certifi pyinstaller
           pip install -r requirements.txt
       - name: Install the Apple certificate and provisioning profile
 #        TODO signing
@@ -73,7 +74,8 @@ jobs:
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
       - uses: actions/setup-node@v7
         with:
-          node-version: 16
+          node-version: 24
+          check-latest: true
       - run: npm install -g appdmg
       - name: build binary
 #        TODO /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime dist/Applications/Kindle\ Comic\ Converter.app -v
